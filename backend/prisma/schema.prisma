@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SYSTEM_ADMIN
+  INSTITUTION_OWNER
+  STAFF_ADMIN
+  TEACHER
+}
+
+enum InstitutionType {
+  SCHOOL
+  COLLEGE
+  UNIVERSITY
+}
+
+enum SubjectType {
+  THEORY
+  LAB
+}
+
+enum RoomType {
+  CLASSROOM
+  LAB
+}
+
+enum TimetableStatus {
+  DRAFT
+  LOCKED
+}
+
+model User {
+  id        String @id @default(uuid())
+  name      String
+  email     String @unique
+  password  String
+  role      Role
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Institution {
+  id        String @id @default(uuid())
+  name      String
+  type      InstitutionType
+  ownerId   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Campus {
+  id            String @id @default(uuid())
+  institutionId String
+  name          String
+  location      String
+
+  createdAt DateTime @default(now())
+}
+
+model AcademicLevel {
+  id       String @id @default(uuid())
+  campusId String
+  name     String
+}
+
+model Section {
+  id              String @id @default(uuid())
+  academicLevelId String
+  name            String
+}
+
+model Department {
+  id       String @id @default(uuid())
+  campusId String
+  name     String
+}
+
+model Subject {
+  id           String @id @default(uuid())
+  departmentId String
+  name         String
+  type         SubjectType
+  weeklyHours  Int
+}
+
+model Teacher {
+  id         String @id @default(uuid())
+  userId     String
+  campusId   String
+  maxPerDay  Int
+  maxPerWeek Int
+}
+
+model Room {
+  id       String @id @default(uuid())
+  campusId String
+  name     String
+  type     RoomType
+  capacity Int
+}
+
+model TimeSlot {
+  id        String @id @default(uuid())
+  campusId  String
+  startTime String
+  endTime   String
+  isBreak   Boolean @default(false)
+}
+
+model WorkingDay {
+  id       String @id @default(uuid())
+  campusId String
+  dayName  String
+}
+
+model Timetable {
+  id              String @id @default(uuid())
+  campusId        String
+  academicLevelId String
+  sectionId       String
+  subjectId       String
+  teacherId       String
+  roomId          String
+  dayId           String
+  timeSlotId      String
+  status          TimetableStatus
+
+  createdAt DateTime @default(now())
+}
