@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { AuthState, LoginPayload, SignupPayload } from "./types";
+import type { AuthState, LoginPayload, SignupPayload } from "./types";
 import { loginUser, signupUser } from "./authService";
 
 const tokenFromStorage = localStorage.getItem("token");

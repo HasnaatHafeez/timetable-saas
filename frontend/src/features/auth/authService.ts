@@ -1,5 +1,5 @@
 import axiosInstance from "../../services/axiosInstance";
-import { LoginPayload, SignupPayload } from "./types";
+import type { LoginPayload, SignupPayload } from "./types";
 
 export const loginUser = async (data: LoginPayload) => {
   const response = await axiosInstance.post("/api/auth/login", data);

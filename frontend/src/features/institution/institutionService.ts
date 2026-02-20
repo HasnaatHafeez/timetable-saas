@@ -6,7 +6,10 @@ export interface CreateInstitutionPayload {
   campusName: string;
   location: string;
 }
-
+export const fetchMyInstitution = async () => {
+  const response = await axiosInstance.get("/api/institution/me");
+  return response.data;
+};
 export const createInstitution = async (
   data: CreateInstitutionPayload
 ) => {

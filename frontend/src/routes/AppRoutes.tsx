@@ -1,24 +1,17 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import LoginPage from "../pages/LoginPage";
 import SignupPage from "../pages/SignupPage";
 import DashboardPage from "../pages/DashboardPage";
-import ProtectedRoute from "../components/ProtectedRoute";
 import CreateInstitutionPage from "../pages/CreateInstitutionPage";
-<Route
-  path="/institution/create"
-  element={
-    <ProtectedRoute>
-      <CreateInstitutionPage />
-    </ProtectedRoute>
-  }
-/>
 
-
+import ProtectedRoute from "../components/ProtectedRoute";
+import DashboardLayout from "../layouts/DashboardLayout";
 
 const AppRoutes = () => {
   return (
     <Routes>
       {/* Public Routes */}
+      <Route path="/" element={<LoginPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
 
@@ -27,13 +20,23 @@ const AppRoutes = () => {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <DashboardPage />
+            <DashboardLayout>
+              <DashboardPage />
+            </DashboardLayout>
           </ProtectedRoute>
         }
       />
 
-      {/* Default Redirect */}
-      <Route path="*" element={<Navigate to="/login" />} />
+      <Route
+        path="/institution/create"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout>
+              <CreateInstitutionPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 };
