@@ -8,6 +8,9 @@ const Sidebar = () => {
   const menuItems = [
     { text: "Dashboard", path: "/dashboard" },
     { text: "Create Institution", path: "/institution/create" },
+    { text: "Subjects", path: "/subjects" },
+    { text: "Teachers", path: "/teachers" },
+    { text: "Assign Subjects", path: "/assign" },
   ];
 
   return (
