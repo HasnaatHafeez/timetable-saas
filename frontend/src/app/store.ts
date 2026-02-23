@@ -4,13 +4,19 @@ import institutionReducer from "../features/institution/institutionSlice";
 import subjectReducer from "../features/subject/subjectSlice";
 import teacherReducer from "../features/teacher/teacherSlice";
 import teacherSubjectReducer from "../features/teacherSubject/teacherSubjectSlice";
+import sectionReducer from "../features/section/sectionSlice";
+import timeslotReducer from "../features/timeslot/timeslotSlice";
+import timetableReducer from "../features/timetable/timetableSlice";
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
     institution: institutionReducer,
     subject: subjectReducer,
+    section: sectionReducer,
     teacher: teacherReducer,
+    timeslot: timeslotReducer,
+    timetable: timetableReducer,
     teacherSubject: teacherSubjectReducer, // ✅ Correct placement
   },
 });

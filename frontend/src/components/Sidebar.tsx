@@ -11,6 +11,10 @@ const Sidebar = () => {
     { text: "Subjects", path: "/subjects" },
     { text: "Teachers", path: "/teachers" },
     { text: "Assign Subjects", path: "/assign" },
+    { text: "Sections", path: "/sections" },
+    { text: "Time Slots", path: "/timeslots" },
+    { text: "Time Slots", path: "/timeslots" },
+    { text: "Timetable", path: "/timetable" },
   ];
 
   return (

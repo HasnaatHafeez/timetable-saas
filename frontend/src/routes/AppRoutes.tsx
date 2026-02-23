@@ -8,6 +8,8 @@ import CreateSubjectPage from "../pages/CreateSubjectPage";
 import TeachersPage from "../pages/TeachersPage";
 import CreateTeacherPage from "../pages/CreateTeacherPage";
 import AssignTeacherSubjectPage from "../pages/AssignTeacherSubjectPage";
+import SectionsPage from "../pages/SectionsPage";
+import CreateSectionPage from "../pages/CreateSectionPage";
 
 import ProtectedRoute from "../components/ProtectedRoute";
 import DashboardLayout from "../layouts/DashboardLayout";
@@ -90,12 +92,36 @@ const AppRoutes = () => {
         }
       />
 
+      {/* Teacher-Subject Assignment */}
       <Route
         path="/assign"
         element={
           <ProtectedRoute>
             <DashboardLayout>
               <AssignTeacherSubjectPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Sections */}
+      <Route
+        path="/sections"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout>
+              <SectionsPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/sections/create"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout>
+              <CreateSectionPage />
             </DashboardLayout>
           </ProtectedRoute>
         }
