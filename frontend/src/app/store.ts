@@ -7,8 +7,18 @@ import teacherSubjectReducer from "../features/teacherSubject/teacherSubjectSlic
 import sectionReducer from "../features/section/sectionSlice";
 import timeslotReducer from "../features/timeslot/timeslotSlice";
 import timetableReducer from "../features/timetable/timetableSlice";
-
+import uiReducer from "../features/ui/uiSlice";
 export const store = configureStore({
+reducer: {
+  auth: authReducer,
+  institution: institutionReducer,
+  subject: subjectReducer,
+  teacher: teacherReducer,
+  section: sectionReducer,
+  timetable: timetableReducer,
+  ui: uiReducer,
+}
+
   reducer: {
     auth: authReducer,
     institution: institutionReducer,

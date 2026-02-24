@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { createSubject, fetchSubjects } from "./subjectService";
 import type { Subject, CreateSubjectPayload } from "./types";
+import { showNotification } from "../ui/uiSlice";
 
 interface SubjectState {
   subjects: Subject[];
@@ -14,14 +15,32 @@ const initialState: SubjectState = {
   error: null,
 };
 
+
 export const createSubjectThunk = createAsyncThunk(
   "subject/create",
-  async (data: CreateSubjectPayload, thunkAPI) => {
+  async (data: any, thunkAPI) => {
     try {
-      return await createSubject(data);
+      const response = await createSubject(data);
+
+      thunkAPI.dispatch(
+        showNotification({
+          message: "Subject created successfully",
+          severity: "success",
+        })
+      );
+
+      return response;
     } catch (error: any) {
+
+      thunkAPI.dispatch(
+        showNotification({
+          message: error.response?.data?.message || "Create failed",
+          severity: "error",
+        })
+      );
+
       return thunkAPI.rejectWithValue(
-        error.response?.data?.message || "Create subject failed"
+        error.response?.data?.message || "Create failed"
       );
     }
   }

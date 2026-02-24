@@ -16,6 +16,7 @@ import {
   TableBody,
 } from "@mui/material";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
+import { CircularProgress } from "@mui/material";
 import { fetchSectionsThunk } from "../features/section/sectionSlice";
 import {
   generateTimetableThunk,
@@ -25,9 +26,26 @@ import {
 const TimetablePage = () => {
   const dispatch = useAppDispatch();
   const { sections } = useAppSelector((state) => state.section);
-  const { entries } = useAppSelector((state) => state.timetable);
+  
+  const { entries, status } = useAppSelector((state) => state.timetable);
 
   const [selectedSection, setSelectedSection] = useState("");
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+
+const timeSlots = [
+  "09:00",
+  "10:00",
+  "11:00",
+  "12:00",
+  "01:00",
+];
+const getSlot = (day: string, time: string) => {
+  return entries.find(
+    (entry) =>
+      entry.day === day &&
+      entry.startTime === time
+  );
+};
   const { user } = useAppSelector((state) => state.auth);
   
 
@@ -91,16 +109,62 @@ const TimetablePage = () => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {entries.map((entry) => (
-            <TableRow key={entry.id}>
-              <TableCell>{entry.day}</TableCell>
-              <TableCell>
-                {entry.startTime} - {entry.endTime}
-              </TableCell>
-              <TableCell>{entry.subjectName}</TableCell>
-              <TableCell>{entry.teacherName}</TableCell>
-            </TableRow>
-          ))}
+          <Table>
+  <TableHead>
+    <TableRow>
+      <TableCell>Day / Time</TableCell>
+      {timeSlots.map((time) => (
+        <TableCell key={time}>{time}</TableCell>
+      ))}
+    </TableRow>
+  </TableHead>
+
+  <TableBody>
+    {days.map((day) => (
+      <TableRow key={day}>
+        <TableCell>{day}</TableCell>
+
+        {timeSlots.map((time) => {
+          const slot = getSlot(day, time);
+
+          const conflicts = entries.filter(
+            (e) =>
+              e.day === day &&
+              e.startTime === time &&
+              slot &&
+              e.teacherName === slot.teacherName
+          );
+
+          const isConflict = conflicts.length > 1;
+
+          return (
+            <TableCell
+              key={time}
+              sx={{
+                backgroundColor: isConflict
+                  ? "#ffebee"
+                  : "transparent",
+              }}
+            >
+              {slot ? (
+                <>
+                  <div>
+                    <strong>{slot.subjectName}</strong>
+                  </div>
+                  <div style={{ fontSize: 12 }}>
+                    {slot.teacherName}
+                  </div>
+                </>
+              ) : (
+                "-"
+              )}
+            </TableCell>
+          );
+        })}
+      </TableRow>
+    ))}
+  </TableBody>
+</Table>
         </TableBody>
       </Table>
     </Container>
