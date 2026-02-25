@@ -1,173 +1,312 @@
+import { useState, useEffect } from "react";
+import api from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { Printer, Download, Calendar } from "lucide-react";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
+import { SkeletonLoader } from "@/components/SkeletonLoader";
+import { motion } from "framer-motion";
+import { useInstitution } from "@/contexts/InstitutionContext";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
-
-import { useEffect, useState } from "react";
-import {
-  Container,
-  Typography,
-  Button,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-} from "@mui/material";
-import { useAppDispatch, useAppSelector } from "../app/hooks";
-import { CircularProgress } from "@mui/material";
-import { fetchSectionsThunk } from "../features/section/sectionSlice";
-import {
-  generateTimetableThunk,
-  fetchTimetableThunk,
-} from "../features/timetable/timetableSlice";
+interface TimetableEntry {
+  day: string;
+  time: string;
+  subject: string;
+  teacher: string;
+  room: string;
+  class: string;
+  className?: string;
+  semester?: string;
+  section?: string;
+}
 
 const TimetablePage = () => {
-  const dispatch = useAppDispatch();
-  const { sections } = useAppSelector((state) => state.section);
-  
-  const { entries, status } = useAppSelector((state) => state.timetable);
-
+  const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [viewBy, setViewBy] = useState("class");
+  const [filterValue, setFilterValue] = useState("");
+  const [selectedClassName, setSelectedClassName] = useState("");
+  const [selectedSemester, setSelectedSemester] = useState("");
   const [selectedSection, setSelectedSection] = useState("");
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-
-const timeSlots = [
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "01:00",
-];
-const getSlot = (day: string, time: string) => {
-  return entries.find(
-    (entry) =>
-      entry.day === day &&
-      entry.startTime === time
-  );
-};
-  const { user } = useAppSelector((state) => state.auth);
-  
+  const [exportNote, setExportNote] = useState("");
+  const [effectiveFrom, setEffectiveFrom] = useState("");
+  const [effectiveTo, setEffectiveTo] = useState("");
+  const [teachers, setTeachers] = useState<string[]>([]);
+  const [rooms, setRooms] = useState<string[]>([]);
+  const { toast } = useToast();
+  const { institution } = useInstitution();
 
   useEffect(() => {
-    dispatch(fetchSectionsThunk());
-  }, [dispatch]);
+    const fetchData = async () => {
+      try {
+        const [tt, te, ro] = await Promise.all([
+          api.get("/timetable").catch(() => ({ data: [] })),
+          api.get("/teachers").catch(() => ({ data: [] })),
+          api.get("/rooms").catch(() => ({ data: [] })),
+        ]);
+        setTimetable(tt.data);
+        setTeachers(te.data.map((t: any) => t.name));
+        setRooms(ro.data.map((r: any) => r.name));
+      } catch {
+        // fallback
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
-  const handleGenerate = async () => {
-    await dispatch(generateTimetableThunk(selectedSection));
-    const filteredEntries = entries.filter((entry) => {
-  if (user?.role === "TEACHER") {
-    return entry.teacherName === user.name;
-  }
+  const filteredEntries = timetable.filter((entry) => {
+    if (viewBy === "class") {
+      if (selectedClassName && (entry.className || "") !== selectedClassName) return false;
+      if (selectedSemester && (entry.semester || "") !== selectedSemester) return false;
+      if (selectedSection && (entry.section || "") !== selectedSection) return false;
+      return true;
+    }
 
-  if (user?.role === "STUDENT") {
-    return entry.sectionId === user.sectionId;
-  }
+    if (!filterValue) return true;
+    if (viewBy === "class") return entry.class === filterValue;
+    if (viewBy === "teacher") return entry.teacher === filterValue;
+    if (viewBy === "room") return entry.room === filterValue;
+    return true;
+  });
 
-  return true; // ADMIN
-});
+  const dayOptions = Array.from(new Set(filteredEntries.map((entry) => entry.day).filter(Boolean)));
+  const timeSlotOptions = Array.from(new Set(filteredEntries.map((entry) => entry.time).filter(Boolean)));
+
+  const getEntry = (day: string, time: string) =>
+    filteredEntries.find((e) => e.day === day && e.time === time);
+
+  const classOptions = Array.from(new Set((timetable || []).map((item) => item.className || "").filter(Boolean)));
+  const semesterOptions = Array.from(
+    new Set(
+      (timetable || [])
+        .filter((item) => !selectedClassName || item.className === selectedClassName)
+        .map((item) => item.semester || "")
+        .filter(Boolean)
+    )
+  );
+  const sectionOptions = Array.from(
+    new Set(
+      (timetable || [])
+        .filter((item) => !selectedClassName || item.className === selectedClassName)
+        .filter((item) => !selectedSemester || item.semester === selectedSemester)
+        .map((item) => item.section || "")
+        .filter(Boolean)
+    )
+  );
+
+  const filterOptions = viewBy === "teacher" ? teachers : rooms;
+
+  const handlePrint = () => window.print();
+  const handleExportPDF = () => {
+    if (filteredEntries.length === 0) {
+      toast({ title: "No data", description: "No timetable entries available for export", variant: "destructive" });
+      return;
+    }
+
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const institutionName = institution?.name || "Institution";
+    const dateRangeLabel = effectiveFrom && effectiveTo ? `${effectiveFrom} to ${effectiveTo}` : "Not specified";
+    const noteLabel = exportNote.trim() || "N/A";
+    const filterSummary = viewBy === "class"
+      ? `Class: ${selectedClassName || "All"} | Semester: ${selectedSemester || "All"} | Section: ${selectedSection || "All"}`
+      : `${viewBy === "teacher" ? "Teacher" : "Room"}: ${filterValue || "All"}`;
+
+    doc.setFontSize(16);
+    doc.text(`${institutionName} - Timetable`, 40, 40);
+    doc.setFontSize(10);
+    doc.text(`Date Range: ${dateRangeLabel}`, 40, 60);
+    doc.text(`Note: ${noteLabel}`, 40, 76);
+    doc.text(`Filters: ${filterSummary}`, 40, 92);
+
+    const rows = filteredEntries.map((entry) => [
+      entry.class || "—",
+      entry.day || "—",
+      entry.time || "—",
+      entry.subject || "—",
+      entry.teacher || "—",
+      entry.room || "—",
+    ]);
+
+    autoTable(doc, {
+      startY: 108,
+      head: [["Class", "Day", "Time", "Subject", "Teacher", "Room"]],
+      body: rows,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [41, 128, 185] },
+    });
+
+    doc.save("timetable.pdf");
   };
 
+  if (loading) return <SkeletonLoader type="table" count={8} />;
+
   return (
-    <Container>
-      <Typography variant="h4" gutterBottom>
-        Timetable Generator
-      </Typography>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+      <PageHeader
+        title="Timetable"
+        description="View the generated schedule"
+        action={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Print</Button>
+            <Button variant="outline" onClick={handleExportPDF}><Download className="mr-2 h-4 w-4" />Export PDF</Button>
+          </div>
+        }
+      />
 
-      <FormControl fullWidth margin="normal">
-        <InputLabel>Section</InputLabel>
-        <Select
-          value={selectedSection}
-          onChange={(e) => setSelectedSection(e.target.value)}
-          label="Section"
-        >
-          {sections.map((section) => (
-            <MenuItem key={section.id} value={section.id}>
-              {section.name}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <Tabs value={viewBy} onValueChange={setViewBy} className="w-full sm:w-auto">
+          <TabsList>
+            <TabsTrigger value="class">By Class</TabsTrigger>
+            <TabsTrigger value="teacher">By Teacher</TabsTrigger>
+            <TabsTrigger value="room">By Room</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-      {user?.role === "ADMIN" && (
-  <Button
-    variant="contained"
-    onClick={handleGenerate}
-    sx={{ mb: 3 }}
-  >
-    Generate Timetable
-  </Button>
-)}
-
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Day</TableCell>
-            <TableCell>Time</TableCell>
-            <TableCell>Subject</TableCell>
-            <TableCell>Teacher</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <Table>
-  <TableHead>
-    <TableRow>
-      <TableCell>Day / Time</TableCell>
-      {timeSlots.map((time) => (
-        <TableCell key={time}>{time}</TableCell>
-      ))}
-    </TableRow>
-  </TableHead>
-
-  <TableBody>
-    {days.map((day) => (
-      <TableRow key={day}>
-        <TableCell>{day}</TableCell>
-
-        {timeSlots.map((time) => {
-          const slot = getSlot(day, time);
-
-          const conflicts = entries.filter(
-            (e) =>
-              e.day === day &&
-              e.startTime === time &&
-              slot &&
-              e.teacherName === slot.teacherName
-          );
-
-          const isConflict = conflicts.length > 1;
-
-          return (
-            <TableCell
-              key={time}
-              sx={{
-                backgroundColor: isConflict
-                  ? "#ffebee"
-                  : "transparent",
+        {viewBy === "class" ? (
+          <>
+            <Select
+              value={selectedClassName || "all"}
+              onValueChange={(value) => {
+                const next = value === "all" ? "" : value;
+                setSelectedClassName(next);
+                setSelectedSemester("");
+                setSelectedSection("");
               }}
             >
-              {slot ? (
-                <>
-                  <div>
-                    <strong>{slot.subjectName}</strong>
-                  </div>
-                  <div style={{ fontSize: 12 }}>
-                    {slot.teacherName}
-                  </div>
-                </>
-              ) : (
-                "-"
-              )}
-            </TableCell>
-          );
-        })}
-      </TableRow>
-    ))}
-  </TableBody>
-</Table>
-        </TableBody>
-      </Table>
-    </Container>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="Select class" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Classes</SelectItem>
+                {classOptions.map((opt) => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={selectedSemester || "all"}
+              onValueChange={(value) => {
+                const next = value === "all" ? "" : value;
+                setSelectedSemester(next);
+                setSelectedSection("");
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="Select semester" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Semesters</SelectItem>
+                {semesterOptions.map((opt) => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={selectedSection || "all"}
+              onValueChange={(value) => setSelectedSection(value === "all" ? "" : value)}
+            >
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="Select section" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sections</SelectItem>
+                {sectionOptions.map((opt) => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        ) : (
+          <Select value={filterValue || "all"} onValueChange={(value) => setFilterValue(value === "all" ? "" : value)}>
+            <SelectTrigger className="w-full sm:w-48">
+              <SelectValue placeholder={`Select ${viewBy}`} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {filterOptions.map((opt) => (
+                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-card p-3 md:grid-cols-3">
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">From Date</p>
+          <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">To Date</p>
+          <Input type="date" value={effectiveTo} onChange={(e) => setEffectiveTo(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Note</p>
+          <Input value={exportNote} onChange={(e) => setExportNote(e.target.value)} placeholder="e.g., Effective for Midterm period" />
+        </div>
+      </div>
+
+      {timetable.length === 0 ? (
+        <EmptyState
+          title="No timetable generated yet"
+          description="Go to the Generate page to create a new timetable."
+          icon={<Calendar className="h-8 w-8 text-muted-foreground" />}
+        />
+      ) : filteredEntries.length === 0 ? (
+        <EmptyState
+          title="No timetable entries for this filter"
+          description="Try a different class, semester, section, teacher, or room filter."
+          icon={<Calendar className="h-8 w-8 text-muted-foreground" />}
+        />
+      ) : (
+        <div className="rounded-lg border border-border bg-card card-shadow overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Time</th>
+                {dayOptions.map((d) => (
+                  <th key={d} className="px-4 py-3 text-left font-medium text-muted-foreground">{d}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {timeSlotOptions.map((time) => (
+                <tr key={time} className="border-b border-border last:border-0">
+                  <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">{time}</td>
+                  {dayOptions.map((day) => {
+                    const entry = getEntry(day, time);
+                    return (
+                      <td key={day} className="px-4 py-3">
+                        {entry ? (
+                          <div className="rounded-md bg-primary/10 p-2">
+                            <p className="text-xs font-semibold text-primary">{entry.subject}</p>
+                            <p className="text-xs text-muted-foreground">{entry.teacher}</p>
+                            <Badge variant="secondary" className="mt-1 text-xs">{entry.room}</Badge>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </motion.div>
   );
 };
 

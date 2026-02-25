@@ -17,7 +17,10 @@ exports.assignSubjectToTeacher = async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to assign subject" });
-  }
+  console.error(error);
+  res.status(500).json({
+    message: "Failed to assign subject",
+    error: error.message
+  });
+}
 };

@@ -1,14 +1,18 @@
 import { Navigate } from "react-router-dom";
-import { useAppSelector } from "../app/hooks";
+import { useAuth } from "@/contexts/AuthContext";
 
-interface Props {
-  children: React.ReactNode;
-}
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, isLoading } = useAuth();
 
-const ProtectedRoute = ({ children }: Props) => {
-  const { token } = useAppSelector((state) => state.auth);
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
-  if (!token) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
