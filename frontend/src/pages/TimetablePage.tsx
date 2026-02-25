@@ -14,6 +14,7 @@ import { motion } from "framer-motion";
 import { useInstitution } from "@/contexts/InstitutionContext";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import html2canvas from "html2canvas";
 
 interface TimetableEntry {
   day: string;
@@ -106,45 +107,39 @@ const TimetablePage = () => {
   const filterOptions = viewBy === "teacher" ? teachers : rooms;
 
   const handlePrint = () => window.print();
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (filteredEntries.length === 0) {
       toast({ title: "No data", description: "No timetable entries available for export", variant: "destructive" });
       return;
     }
 
-    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-    const institutionName = institution?.name || "Institution";
-    const dateRangeLabel = effectiveFrom && effectiveTo ? `${effectiveFrom} to ${effectiveTo}` : "Not specified";
-    const noteLabel = exportNote.trim() || "N/A";
-    const filterSummary = viewBy === "class"
-      ? `Class: ${selectedClassName || "All"} | Semester: ${selectedSemester || "All"} | Section: ${selectedSection || "All"}`
-      : `${viewBy === "teacher" ? "Teacher" : "Room"}: ${filterValue || "All"}`;
+    const el = document.getElementById("timetable-print-area");
+    if (!el) {
+      toast({ title: "Error", description: "Unable to locate timetable for export", variant: "destructive" });
+      return;
+    }
 
-    doc.setFontSize(16);
-    doc.text(`${institutionName} - Timetable`, 40, 40);
-    doc.setFontSize(10);
-    doc.text(`Date Range: ${dateRangeLabel}`, 40, 60);
-    doc.text(`Note: ${noteLabel}`, 40, 76);
-    doc.text(`Filters: ${filterSummary}`, 40, 92);
+    try {
+      // render element to canvas
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL("image/png");
 
-    const rows = filteredEntries.map((entry) => [
-      entry.class || "—",
-      entry.day || "—",
-      entry.time || "—",
-      entry.subject || "—",
-      entry.teacher || "—",
-      entry.room || "—",
-    ]);
+      const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-    autoTable(doc, {
-      startY: 108,
-      head: [["Class", "Day", "Time", "Subject", "Teacher", "Room"]],
-      body: rows,
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [41, 128, 185] },
-    });
+      // header
+      const institutionName = institution?.name || "Institution";
+      pdf.setFontSize(14);
+      pdf.text(`${institutionName} - Timetable`, 40, 30);
 
-    doc.save("timetable.pdf");
+      // add image below header
+      pdf.addImage(imgData, "PNG", 0, 40, pdfWidth, pdfHeight);
+      pdf.save("timetable.pdf");
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Export failed", description: "Could not export timetable to PDF", variant: "destructive" });
+    }
   };
 
   if (loading) return <SkeletonLoader type="table" count={8} />;
@@ -270,7 +265,7 @@ const TimetablePage = () => {
           icon={<Calendar className="h-8 w-8 text-muted-foreground" />}
         />
       ) : (
-        <div className="rounded-lg border border-border bg-card card-shadow overflow-x-auto">
+        <div id="timetable-print-area" className="rounded-lg border border-border bg-card card-shadow overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">

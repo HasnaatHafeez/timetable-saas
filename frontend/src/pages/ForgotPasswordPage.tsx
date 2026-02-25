@@ -43,7 +43,7 @@ const ForgotPasswordPage = () => {
       >
         <div className="mb-8 flex items-center gap-2">
           <GraduationCap className="h-8 w-8 text-primary" />
-          <span className="text-xl font-bold text-foreground">Smart Timetable</span>
+          <span className="text-xl font-bold text-foreground">Leverage Timetrix</span>
         </div>
 
         <h1 className="mb-2 text-2xl font-bold text-foreground">Reset your password</h1>

@@ -102,7 +102,7 @@ const AppSidebar = () => {
       <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-4">
         <GraduationCap className="h-7 w-7 flex-shrink-0 text-primary" />
         {!collapsed && (
-          <span className="text-lg font-bold text-foreground">UniSchedule</span>
+          <span className="text-lg font-bold text-foreground">Leverage Timetrix</span>
         )}
       </div>
 

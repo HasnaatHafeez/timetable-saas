@@ -44,40 +44,11 @@ const stats = [
   { value: "24/7", label: "Cloud access" },
 ];
 
-const pricingPlans = [
-  {
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    description: "Perfect for trying out UniSchedule",
-    features: ["Up to 5 teachers", "Up to 3 rooms", "Basic timetable generation", "Weekly grid view", "Email support"],
-    cta: "Get Started",
-    popular: false,
-  },
-  {
-    name: "Pro",
-    price: "$29",
-    period: "/month",
-    description: "For departments and small colleges",
-    features: ["Unlimited teachers", "Unlimited rooms", "Advanced conflict resolution", "PDF & print export", "Multi-view (class/teacher/room)", "Priority support", "Dark mode"],
-    cta: "Start Pro Trial",
-    popular: true,
-  },
-  {
-    name: "Enterprise",
-    price: "$99",
-    period: "/month",
-    description: "For large universities with multiple departments",
-    features: ["Everything in Pro", "Multi-department support", "Custom constraints & rules", "API access", "SSO authentication", "Dedicated account manager", "SLA guarantee"],
-    cta: "Contact Sales",
-    popular: false,
-  },
-];
+
 
 const navLinks = [
   { href: "#features", label: "Features" },
   { href: "#how-it-works", label: "How It Works" },
-  { href: "#pricing", label: "Pricing" },
   { href: "#stats", label: "Why Us" },
 ];
 
@@ -116,7 +87,7 @@ const LandingPage = () => {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link to="/" className="flex items-center gap-2">
             <GraduationCap className="h-7 w-7 text-primary" />
-            <span className="text-lg font-bold text-foreground">UniSchedule</span>
+            <span className="text-lg font-bold text-foreground">Leverage Timetrix</span>
           </Link>
           <nav className="hidden items-center gap-8 md:flex">
             {navLinks.map((link) => (
@@ -235,7 +206,7 @@ const LandingPage = () => {
                 <div className="h-2.5 w-2.5 rounded-full bg-destructive/60" />
                 <div className="h-2.5 w-2.5 rounded-full bg-warning/60" />
                 <div className="h-2.5 w-2.5 rounded-full bg-success/60" />
-                <span className="ml-3 text-xs text-muted-foreground">UniSchedule — Dashboard</span>
+                        <span className="ml-3 text-xs text-muted-foreground">Leverage Timetrix — Dashboard</span>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-6">
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -327,58 +298,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Pricing */}
-      <section id="pricing" className="scroll-mt-20 py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <motion.div {...fade()} className="mx-auto mb-14 max-w-2xl text-center">
-            <h2 className="text-3xl font-bold text-foreground">Simple, transparent pricing</h2>
-            <p className="mt-3 text-muted-foreground">Choose the plan that fits your institution. Upgrade or downgrade anytime.</p>
-          </motion.div>
-          <div className="grid gap-6 md:grid-cols-3">
-            {pricingPlans.map((plan, i) => (
-              <motion.div
-                key={plan.name}
-                {...fade(i * 0.1)}
-                className={cn(
-                  "relative flex flex-col rounded-2xl border p-8 transition-shadow",
-                  plan.popular
-                    ? "border-primary bg-card card-shadow-lg scale-[1.02]"
-                    : "border-border bg-card card-shadow hover:card-shadow-hover"
-                )}
-              >
-                {plan.popular && (
-                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground">
-                    Most Popular
-                  </Badge>
-                )}
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{plan.description}</p>
-                </div>
-                <div className="mb-6">
-                  <span className="text-4xl font-extrabold text-foreground">{plan.price}</span>
-                  <span className="text-sm text-muted-foreground">{plan.period}</span>
-                </div>
-                <ul className="mb-8 flex-1 space-y-3">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2.5 text-sm text-muted-foreground">
-                      <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-success" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  className="w-full"
-                  variant={plan.popular ? "default" : "outline"}
-                  asChild
-                >
-                  <Link to="/register">{plan.cta}</Link>
-                </Button>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+      
 
       {/* CTA */}
       <section className="py-20">
@@ -386,7 +306,7 @@ const LandingPage = () => {
           <motion.div {...fade()} className="rounded-2xl bg-primary px-8 py-16 text-center">
             <h2 className="text-3xl font-bold text-primary-foreground">Ready to simplify your scheduling?</h2>
             <p className="mx-auto mt-4 max-w-lg text-primary-foreground/80">
-              Join universities already using UniSchedule to eliminate timetable conflicts and save hours of manual work.
+                Join institutions already using Leverage Timetrix to eliminate timetable conflicts and save hours of manual work.
             </p>
             <div className="mt-8 flex items-center justify-center gap-4">
               <Button size="lg" variant="secondary" asChild>
@@ -407,9 +327,9 @@ const LandingPage = () => {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 md:flex-row">
           <div className="flex items-center gap-2">
             <GraduationCap className="h-5 w-5 text-primary" />
-            <span className="text-sm font-semibold text-foreground">UniSchedule</span>
-          </div>
-          <p className="text-xs text-muted-foreground">© 2026 UniSchedule. All rights reserved.</p>
+                <span className="text-sm font-semibold text-foreground">Leverage Timetrix</span>
+              </div>
+              <p className="text-xs text-muted-foreground">© 2026 LEVERAGE (PRIVATE) LIMITED. Leverage Timetrix™.</p>
         </div>
       </footer>
     </div>

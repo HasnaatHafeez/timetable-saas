@@ -39,7 +39,7 @@ const RegisterPage = () => {
   return (
     <div className="flex min-h-screen">
       <div className="hidden w-1/2 items-center justify-center bg-primary lg:flex">
-        <motion.div
+          <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6 }}
@@ -48,7 +48,7 @@ const RegisterPage = () => {
           <GraduationCap className="mx-auto mb-6 h-20 w-20 text-primary-foreground" />
           <h2 className="mb-4 text-4xl font-bold text-primary-foreground">Get Started</h2>
           <p className="text-lg text-primary-foreground/80">
-            Create your account and start generating smart timetables today.
+            Create your account and start generating smart timetables with Leverage Timetrix today.
           </p>
         </motion.div>
       </div>
@@ -62,7 +62,7 @@ const RegisterPage = () => {
         >
           <div className="mb-8 flex items-center gap-2 lg:hidden">
             <GraduationCap className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold text-foreground">Smart Timetable</span>
+            <span className="text-xl font-bold text-foreground">Leverage Timetrix</span>
           </div>
 
           <h1 className="mb-2 text-2xl font-bold text-foreground">Create an account</h1>

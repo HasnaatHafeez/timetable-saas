@@ -37,14 +37,14 @@ const LoginPage = () => {
   return (
     <div className="flex min-h-screen">
       <div className="hidden w-1/2 items-center justify-center bg-primary lg:flex">
-        <motion.div
+          <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6 }}
           className="px-12 text-center"
         >
           <GraduationCap className="mx-auto mb-6 h-20 w-20 text-primary-foreground" />
-          <h2 className="mb-4 text-4xl font-bold text-primary-foreground">Smart Timetable</h2>
+          <h2 className="mb-4 text-4xl font-bold text-primary-foreground">Leverage Timetrix</h2>
           <p className="text-lg text-primary-foreground/80">
             Generate conflict-free schedules in seconds with our intelligent algorithm.
           </p>
@@ -60,7 +60,7 @@ const LoginPage = () => {
         >
           <div className="mb-8 flex items-center gap-2 lg:hidden">
             <GraduationCap className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold text-foreground">Smart Timetable</span>
+            <span className="text-xl font-bold text-foreground">Leverage Timetrix</span>
           </div>
 
           <h1 className="mb-2 text-2xl font-bold text-foreground">Welcome back</h1>
@@ -109,16 +109,16 @@ const LoginPage = () => {
               Sign In
             </Button>
           </form>
-
-          <div className="mt-6 rounded-lg border border-dashed border-border bg-muted/50 p-4">
-            <p className="mb-1 text-xs font-semibold text-foreground">Demo Credentials</p>
-            <p className="text-xs text-muted-foreground">
-              Email: <span className="font-mono text-foreground">demo@unischedule.com</span>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Password: <span className="font-mono text-foreground">demo1234</span>
-            </p>
+          <div className="mt-6">
+            <Button variant="outline" className="w-full flex items-center justify-center gap-3">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M21.35 11.1h-9.3v2.8h5.3c-.25 1.55-1.6 4.55-5.3 4.55-3.2 0-5.8-2.65-5.8-5.9s2.6-5.9 5.8-5.9c1.8 0 3.05.75 3.75 1.4l2.55-2.45C16.55 3.7 14.95 3 12.8 3 7.9 3 4 6.9 4 11.9s3.9 8.9 8.8 8.9c5.1 0 8.25-3.6 8.25-8.7 0-.6-.05-1.1-.5-2z" fill="#4285F4"/>
+              </svg>
+              <span>Sign in with Google</span>
+            </Button>
           </div>
+
+          
 
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Don't have an account?{" "}
