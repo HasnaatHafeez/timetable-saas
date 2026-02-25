@@ -22,7 +22,18 @@ exports.getAllUsers = async (req, res) => {
     const { role } = req.query; // optional filter by Role enum string
     const where = role ? { role } : {};
     const users = await prisma.user.findMany({ where });
-    res.json(users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role, isActive: u.isActive })));
+
+    // Ensure staff users are reflected as STAFF_ADMIN in the admin listing
+    const staffRecords = await prisma.staff.findMany({ select: { userId: true } });
+    const staffUserIds = new Set(staffRecords.map(s => s.userId));
+
+    res.json(users.map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: staffUserIds.has(u.id) ? "STAFF_ADMIN" : u.role,
+      isActive: u.isActive,
+    })));
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to fetch users" });
