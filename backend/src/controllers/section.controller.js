@@ -43,6 +43,46 @@ const mapSectionToClass = async (section) => {
   };
 };
 
+const syncSubjectsToSiblingSections = async ({ sectionId, className, academicLevelId, subjects }) => {
+  if (!Array.isArray(subjects)) return 0;
+
+  const uniqueSubjectIds = [...new Set(subjects.filter(Boolean))];
+  const normalizedClassName = (className || "").trim().toLowerCase();
+  if (!normalizedClassName || !academicLevelId) return 0;
+
+  const siblingSections = await prisma.section.findMany({
+    where: {
+      id: { not: sectionId },
+      academicLevelId,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  const matchingSiblingIds = siblingSections
+    .filter((item) => (item.name || "").trim().toLowerCase() === normalizedClassName)
+    .map((item) => item.id);
+
+  if (matchingSiblingIds.length === 0) return 0;
+
+  await prisma.sectionSubject.deleteMany({
+    where: { sectionId: { in: matchingSiblingIds } },
+  });
+
+  if (uniqueSubjectIds.length === 0) return matchingSiblingIds.length;
+
+  await prisma.sectionSubject.createMany({
+    data: matchingSiblingIds.flatMap((siblingId) =>
+      uniqueSubjectIds.map((subjectId) => ({ sectionId: siblingId, subjectId }))
+    ),
+    skipDuplicates: true,
+  });
+
+  return matchingSiblingIds.length;
+};
+
 exports.getSections = async (req, res) => {
   try {
     const { campusId, academicLevelId } = req.query;
@@ -131,6 +171,7 @@ exports.createSection = async (req, res) => {
       },
     });
 
+    let syncedSectionsCount = 0;
     if (Array.isArray(subjects)) {
       const uniqueSubjectIds = [...new Set(subjects.filter(Boolean))];
       if (uniqueSubjectIds.length > 0) {
@@ -139,10 +180,17 @@ exports.createSection = async (req, res) => {
           skipDuplicates: true,
         });
       }
+
+      syncedSectionsCount = await syncSubjectsToSiblingSections({
+        sectionId: created.id,
+        className: resolvedName,
+        academicLevelId: resolvedAcademicLevelId,
+        subjects: uniqueSubjectIds,
+      });
     }
 
     const mapped = await mapSectionToClass(created);
-    res.status(201).json({ ...mapped, _id: mapped.id });
+    res.status(201).json({ ...mapped, _id: mapped.id, syncedSectionsCount });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to create section" });
@@ -184,6 +232,7 @@ exports.updateSection = async (req, res) => {
       },
     });
 
+    let syncedSectionsCount = 0;
     if (Array.isArray(subjects)) {
       const uniqueSubjectIds = [...new Set(subjects.filter(Boolean))];
       await prisma.sectionSubject.deleteMany({ where: { sectionId: id } });
@@ -193,10 +242,20 @@ exports.updateSection = async (req, res) => {
           skipDuplicates: true,
         });
       }
+
+      const targetClassName = resolvedName !== null ? resolvedName : sectionRecord.name;
+      const targetAcademicLevelId = resolvedAcademicLevelId || sectionRecord.academicLevelId;
+
+      syncedSectionsCount = await syncSubjectsToSiblingSections({
+        sectionId: id,
+        className: targetClassName,
+        academicLevelId: targetAcademicLevelId,
+        subjects: uniqueSubjectIds,
+      });
     }
 
     const mapped = await mapSectionToClass(updated);
-    res.json({ ...mapped, _id: mapped.id });
+    res.json({ ...mapped, _id: mapped.id, syncedSectionsCount });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to update section" });

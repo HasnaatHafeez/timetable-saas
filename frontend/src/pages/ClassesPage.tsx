@@ -135,6 +135,44 @@ const ClassesPage = () => {
     setModalOpen(true);
   };
 
+  const syncSubjectsAcrossSiblingSections = async ({
+    className,
+    academicLevelId,
+    subjects,
+    excludeId,
+  }: {
+    className: string;
+    academicLevelId: string;
+    subjects: string[];
+    excludeId?: string;
+  }) => {
+    const normalizedName = (className || "").trim().toLowerCase();
+    if (!normalizedName || !academicLevelId) return 0;
+
+    const siblingSections = classes.filter((item) => {
+      const sameName = (item.name || "").trim().toLowerCase() === normalizedName;
+      const sameLevel = (item.academicLevelId || "") === academicLevelId;
+      const notExcluded = !excludeId || item.id !== excludeId;
+      return sameName && sameLevel && notExcluded;
+    });
+
+    if (siblingSections.length === 0) return 0;
+
+    await Promise.all(
+      siblingSections.map((item) =>
+        api.put(`/classes/${item.id}`, {
+          name: item.name,
+          section: item.section,
+          subjects,
+          academicLevelId: item.academicLevelId,
+          ...(campus ? { campusId: campus.id } : {}),
+        })
+      )
+    );
+
+    return siblingSections.length;
+  };
+
   const handleSave = async () => {
     if (!academicLevel && !campus) {
       toast({ title: "Error", description: "Please select a campus first", variant: "destructive" });
@@ -160,8 +198,37 @@ const ClassesPage = () => {
       ...(campus ? { campusId: campus.id } : {}),
     };
     try {
-      if (editingId) { await api.put(`/classes/${editingId}`, payload); toast({ title: "Class updated" }); }
-      else { await api.post("/classes", payload); toast({ title: "Class added" }); }
+      if (editingId) {
+        const response = await api.put(`/classes/${editingId}`, payload);
+        const backendSynced = Number(response?.data?.syncedSectionsCount || 0);
+        const frontendSynced = await syncSubjectsAcrossSiblingSections({
+          className: form.name,
+          academicLevelId: form.academicLevelId,
+          subjects: form.subjects,
+          excludeId: editingId,
+        });
+        const synced = Math.max(backendSynced, frontendSynced);
+        toast({
+          title: "Class updated",
+          description: synced > 0 ? `Auto-synced subjects to ${synced} sibling section(s)` : undefined,
+        });
+      }
+      else {
+        const response = await api.post("/classes", payload);
+        const backendSynced = Number(response?.data?.syncedSectionsCount || 0);
+        const createdId = response?.data?.id || response?.data?._id;
+        const frontendSynced = await syncSubjectsAcrossSiblingSections({
+          className: form.name,
+          academicLevelId: form.academicLevelId,
+          subjects: form.subjects,
+          excludeId: createdId,
+        });
+        const synced = Math.max(backendSynced, frontendSynced);
+        toast({
+          title: "Class added",
+          description: synced > 0 ? `Auto-synced subjects to ${synced} sibling section(s)` : undefined,
+        });
+      }
       setModalOpen(false); fetchClasses();
     } catch (err: any) {
       toast({ title: "Error", description: err.response?.data?.message || "Failed", variant: "destructive" });
@@ -288,6 +355,7 @@ const ClassesPage = () => {
                 })}
                 {subjectOptions.length === 0 && <span className="text-sm text-muted-foreground">No subjects available for this campus.</span>}
               </div>
+              <p className="text-xs text-muted-foreground">Subjects auto-sync to all sections with the same class name and semester.</p>
             </div>
           </div>
           <DialogFooter>

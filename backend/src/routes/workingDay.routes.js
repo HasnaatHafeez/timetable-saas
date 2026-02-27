@@ -7,12 +7,38 @@ const {
   createWorkingDay,
   updateWorkingDay,
   deleteWorkingDay,
+  getHolidays,
+  createHoliday,
+  updateHoliday,
+  deleteHoliday,
 } = require("../controllers/workingDay.controller");
 
 const router = express.Router();
 
 router.get("/", auth, getWorkingDays);
+router.get("/holidays", auth, getHolidays);
 router.get("/:id", auth, getWorkingDayById);
+
+router.post(
+  "/holidays",
+  auth,
+  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  createHoliday
+);
+
+router.put(
+  "/holidays/:id",
+  auth,
+  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  updateHoliday
+);
+
+router.delete(
+  "/holidays/:id",
+  auth,
+  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  deleteHoliday
+);
 
 router.post(
   "/",

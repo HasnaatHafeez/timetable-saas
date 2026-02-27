@@ -1,4 +1,5 @@
 const prisma = require("../prisma/client");
+const bcrypt = require("bcrypt");
 
 const getTeacherTimeSlotIds = async (teacherId) => {
   const availability = await prisma.teacherAvailability.findMany({
@@ -186,9 +187,10 @@ exports.getTeacherById = async (req, res) => {
 
 exports.createTeacher = async (req, res) => {
   try {
-    const { name, email, phone, subjects, timeSlotIds, availabilityByDay, campusId, maxPerDay, maxPerWeek } = req.body;
+    const { name, email, password, phone, subjects, timeSlotIds, availabilityByDay, campusId, maxPerDay, maxPerWeek } = req.body;
+    const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    if (!name || !email) {
+    if (!name || !normalizedEmail) {
       return res.status(400).json({ message: "Name and email are required" });
     }
 
@@ -201,16 +203,49 @@ exports.createTeacher = async (req, res) => {
       return res.status(400).json({ message: "Invalid campusId" });
     }
 
+    const rawPassword = password === undefined ? "" : String(password || "");
+    if (rawPassword && rawPassword.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    if (rawPassword) {
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          email: {
+            equals: normalizedEmail,
+            mode: "insensitive",
+          },
+        },
+        select: { id: true },
+      });
+
+      if (existingUser) {
+        return res.status(400).json({ message: "Email already exists as a user" });
+      }
+    }
+
     const teacher = await prisma.teacher.create({
       data: {
         name,
-        email,
+        email: normalizedEmail,
         phone: phone || "",
         campusId,
         maxPerDay: Number(maxPerDay) || 6,
         maxPerWeek: Number(maxPerWeek) || 30,
       },
     });
+
+    if (rawPassword) {
+      const hashedPassword = await bcrypt.hash(rawPassword, 10);
+      await prisma.user.create({
+        data: {
+          name,
+          email: normalizedEmail,
+          password: hashedPassword,
+          role: "TEACHER",
+        },
+      });
+    }
 
     if (Array.isArray(subjects) && subjects.length > 0) {
       try {
@@ -262,7 +297,17 @@ exports.createTeacher = async (req, res) => {
 exports.updateTeacher = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, phone, subjects, timeSlotIds, availabilityByDay, campusId, maxPerDay, maxPerWeek } = req.body;
+    const { name, email, password, phone, subjects, timeSlotIds, availabilityByDay, campusId, maxPerDay, maxPerWeek } = req.body;
+    const normalizedEmail = email === undefined ? undefined : String(email || "").trim().toLowerCase();
+
+    if (normalizedEmail !== undefined && !normalizedEmail) {
+      return res.status(400).json({ message: "Email cannot be empty" });
+    }
+
+    const rawPassword = password === undefined ? "" : String(password || "");
+    if (rawPassword && rawPassword.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
 
     if (campusId) {
       const campus = await prisma.campus.findUnique({ where: { id: campusId } });
@@ -283,13 +328,121 @@ exports.updateTeacher = async (req, res) => {
       where: { id },
       data: {
         ...(name !== undefined ? { name } : {}),
-        ...(email !== undefined ? { email } : {}),
+        ...(normalizedEmail !== undefined ? { email: normalizedEmail } : {}),
         ...(phone !== undefined ? { phone } : {}),
         ...(campusId ? { campusId } : {}),
         ...(maxPerDay !== undefined ? { maxPerDay: Number(maxPerDay) } : {}),
         ...(maxPerWeek !== undefined ? { maxPerWeek: Number(maxPerWeek) } : {}),
       },
     });
+
+    const previousEmail = String(teacher.email || "").trim().toLowerCase();
+    const currentEmail = normalizedEmail !== undefined ? normalizedEmail : previousEmail;
+    const displayName = name !== undefined ? name : teacher.name;
+
+    const userByOldEmail = previousEmail
+      ? await prisma.user.findFirst({
+          where: {
+            email: {
+              equals: previousEmail,
+              mode: "insensitive",
+            },
+          },
+        })
+      : null;
+
+    const userByCurrentEmail = currentEmail
+      ? await prisma.user.findFirst({
+          where: {
+            email: {
+              equals: currentEmail,
+              mode: "insensitive",
+            },
+          },
+        })
+      : null;
+
+    const linkedUser = userByOldEmail || userByCurrentEmail;
+
+    if (rawPassword) {
+      const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+      if (linkedUser) {
+        const conflictingUser = await prisma.user.findFirst({
+          where: {
+            id: { not: linkedUser.id },
+            email: {
+              equals: currentEmail,
+              mode: "insensitive",
+            },
+          },
+          select: { id: true },
+        });
+
+        if (conflictingUser) {
+          return res.status(400).json({ message: "Email already exists" });
+        }
+
+        await prisma.user.update({
+          where: { id: linkedUser.id },
+          data: {
+            name: displayName,
+            email: currentEmail,
+            password: hashedPassword,
+            role: "TEACHER",
+          },
+        });
+      } else {
+        const existingUser = await prisma.user.findFirst({
+          where: {
+            email: {
+              equals: currentEmail,
+              mode: "insensitive",
+            },
+          },
+          select: { id: true },
+        });
+
+        if (existingUser) {
+          return res.status(400).json({ message: "Email already exists" });
+        }
+
+        await prisma.user.create({
+          data: {
+            name: displayName,
+            email: currentEmail,
+            password: hashedPassword,
+            role: "TEACHER",
+          },
+        });
+      }
+    } else if (linkedUser && (name !== undefined || normalizedEmail !== undefined || linkedUser.role !== "TEACHER")) {
+      const conflictingUser = normalizedEmail !== undefined
+        ? await prisma.user.findFirst({
+            where: {
+              id: { not: linkedUser.id },
+              email: {
+                equals: currentEmail,
+                mode: "insensitive",
+              },
+            },
+            select: { id: true },
+          })
+        : null;
+
+      if (conflictingUser) {
+        return res.status(400).json({ message: "Email already exists" });
+      }
+
+      await prisma.user.update({
+        where: { id: linkedUser.id },
+        data: {
+          ...(name !== undefined ? { name: displayName } : {}),
+          ...(normalizedEmail !== undefined ? { email: currentEmail } : {}),
+          role: "TEACHER",
+        },
+      });
+    }
 
     let currentSubjects = [];
     if (Array.isArray(subjects)) {

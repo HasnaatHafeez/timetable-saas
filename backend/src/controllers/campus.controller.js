@@ -3,10 +3,19 @@ const prisma = require("../prisma/client");
 exports.getCampuses = async (req, res) => {
   try {
     const { institutionId } = req.query;
+    const isStaffAdmin = req.user?.role === "STAFF_ADMIN";
+    const staffCampusIds = Array.isArray(req.staffCampusIds) ? req.staffCampusIds : [];
 
     let where = {};
     if (institutionId) {
       where.institutionId = institutionId;
+    }
+
+    if (isStaffAdmin) {
+      where.id = { in: staffCampusIds };
+      if (req.staffInstitutionId) {
+        where.institutionId = req.staffInstitutionId;
+      }
     }
 
     const campuses = await prisma.campus.findMany({
@@ -28,6 +37,13 @@ exports.getCampuses = async (req, res) => {
 exports.getCampusById = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (req.user?.role === "STAFF_ADMIN") {
+      const staffCampusIds = Array.isArray(req.staffCampusIds) ? req.staffCampusIds : [];
+      if (!staffCampusIds.includes(id)) {
+        return res.status(403).json({ message: "Access denied for this campus" });
+      }
+    }
 
     const campus = await prisma.campus.findUnique({
       where: { id },
@@ -129,10 +145,18 @@ exports.deleteCampus = async (req, res) => {
 exports.getAcademicLevels = async (req, res) => {
   try {
     const { campusId } = req.query;
+    const isStaffAdmin = req.user?.role === "STAFF_ADMIN";
+    const staffCampusIds = Array.isArray(req.staffCampusIds) ? req.staffCampusIds : [];
 
-    const levels = await prisma.academicLevel.findMany({
-      where: campusId ? { campusId } : {},
-    });
+    const where = {};
+    if (campusId) {
+      where.campusId = campusId;
+    }
+    if (isStaffAdmin) {
+      where.campusId = campusId ? campusId : { in: staffCampusIds };
+    }
+
+    const levels = await prisma.academicLevel.findMany({ where });
 
     res.json(levels.map(l => ({
       id: l.id,

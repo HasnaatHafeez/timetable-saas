@@ -22,16 +22,10 @@ type Teacher = {
   name: string;
   email: string;
   phone?: string;
-  subjects?: string[];
-  timeSlotIds?: string[];
-  availabilityByDay?: Record<string, string[]>;
-  availability?: string;
   campusId?: string;
 };
 
-type SubjectOption = { id: string; name: string };
-type TimeSlotOption = { id: string; startTime: string; endTime: string; isBreak?: boolean };
-type WorkingDayOption = { id: string; dayName: string };
+type CampusOption = { id: string; name: string; location?: string; institutionId?: string };
 
 type Staff = {
   id: string;
@@ -39,15 +33,18 @@ type Staff = {
   name: string;
   email: string;
   campusId?: string | null;
+  campusIds?: string[];
+  campuses?: { id: string; name: string; location?: string }[];
 };
 
-const defaultTeacherForm = { name: "", email: "", phone: "", subjects: [] as string[], availabilityByDay: {} as Record<string, string[]>, campusId: "" };
-const defaultStaffForm = { name: "", email: "", password: "", campusId: "" };
+const defaultTeacherForm = { name: "", email: "", password: "", phone: "", campusId: "" };
+const defaultStaffForm = { name: "", email: "", password: "", campusIds: [] as string[] };
 
 const UsersPage = () => {
   const [tab, setTab] = useState<"teachers" | "staff">("teachers");
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [campusOptions, setCampusOptions] = useState<CampusOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
@@ -55,9 +52,6 @@ const UsersPage = () => {
   const [tModalOpen, setTModalOpen] = useState(false);
   const [tEditingId, setTEditingId] = useState<string | null>(null);
   const [tForm, setTForm] = useState(defaultTeacherForm);
-  const [subjectOptions, setSubjectOptions] = useState<SubjectOption[]>([]);
-  const [timeSlotOptions, setTimeSlotOptions] = useState<TimeSlotOption[]>([]);
-  const [workingDays, setWorkingDays] = useState<WorkingDayOption[]>([]);
   const [tSaving, setTSaving] = useState(false);
   const [tDeleteId, setTDeleteId] = useState<string | null>(null);
   const [tDeleting, setTDeleting] = useState(false);
@@ -93,96 +87,57 @@ const UsersPage = () => {
     }
   };
 
-  const fetchTeacherOptions = async (campusId?: string) => {
-    if (!campusId) {
-      setSubjectOptions([]);
-      setTimeSlotOptions([]);
-      setWorkingDays([]);
+  const fetchCampuses = async () => {
+    if (!institution) {
+      setCampusOptions([]);
       return;
     }
 
     try {
-      const [subjectsRes, timeSlotsRes, workingDaysRes] = await Promise.all([
-        api.get(`/subjects?campusId=${campusId}`),
-        api.get(`/timeslots?campusId=${campusId}`),
-        api.get(`/workingdays?campusId=${campusId}`),
-      ]);
-      setSubjectOptions((subjectsRes.data || []).map((subject: any) => ({ id: subject.id, name: subject.name })));
-      setTimeSlotOptions(timeSlotsRes.data || []);
-      setWorkingDays(workingDaysRes.data || []);
+      const res = await api.get(`/campuses?institutionId=${institution.id}`);
+      setCampusOptions(res.data || []);
     } catch {
-      setSubjectOptions([]);
-      setTimeSlotOptions([]);
-      setWorkingDays([]);
+      setCampusOptions([]);
     }
   };
 
   useEffect(() => {
     setLoading(true);
-    Promise.allSettled([fetchTeachers(), fetchStaff()]).then(() => setLoading(false));
+    Promise.allSettled([fetchTeachers(), fetchStaff(), fetchCampuses()]).then(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campus, institution]);
 
-  useEffect(() => {
-    fetchTeacherOptions(campus?.id);
-  }, [campus]);
-
-  const getSubjectName = (subjectId: string) => {
-    const found = subjectOptions.find((subject) => subject.id === subjectId);
-    return found?.name || subjectId;
-  };
-
-  const getTimeSlotLabel = (timeSlotId: string) => {
-    const slot = timeSlotOptions.find((item) => item.id === timeSlotId);
-    if (!slot) return timeSlotId;
-    return `${slot.startTime} - ${slot.endTime}${slot.isBreak ? " (Break)" : ""}`;
-  };
-
-  const getTeacherTimeSlotIds = (teacher: Teacher) => {
-    const fromAvailabilityByDay = Object.values(teacher.availabilityByDay || {}).flat();
-    const fromFlatIds = teacher.timeSlotIds || [];
-    return Array.from(new Set([...fromAvailabilityByDay, ...fromFlatIds]));
-  };
-
-  const getWorkingDayName = (dayId: string) => {
-    const day = workingDays.find((item) => item.id === dayId);
-    return day?.dayName || dayId;
-  };
-
-  const getTeacherDayTimeLabels = (teacher: Teacher) => {
-    const availabilityByDay = teacher.availabilityByDay || {};
-    const labels = Object.entries(availabilityByDay).flatMap(([dayId, slotIds]) => {
-      const dayName = getWorkingDayName(dayId);
-      return (slotIds || []).map((slotId) => `${dayName} • ${getTimeSlotLabel(slotId)}`);
-    });
-
-    if (labels.length > 0) return labels;
-    return getTeacherTimeSlotIds(teacher).map((slotId) => getTimeSlotLabel(slotId));
-  };
-
   const filteredTeachers = teachers.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()) || t.email.toLowerCase().includes(search.toLowerCase()));
   const filteredStaff = staff.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()) || s.email.toLowerCase().includes(search.toLowerCase()));
+  const getCampusNames = (staffItem: Staff) => {
+    const ids = (staffItem.campusIds && staffItem.campusIds.length > 0)
+      ? staffItem.campusIds
+      : (staffItem.campusId ? [staffItem.campusId] : []);
+
+    if (ids.length === 0) return ["—"];
+
+    return ids.map((campusId) => {
+      const found = campusOptions.find((item) => item.id === campusId);
+      return found ? `${found.name}${found.location ? ` (${found.location})` : ""}` : campusId;
+    });
+  };
 
   // Teacher handlers
   const openAddTeacher = () => { 
     setTEditingId(null); 
     setTForm(defaultTeacherForm); 
-    fetchTeacherOptions(campus?.id);
     setTModalOpen(true); 
     setTab("teachers"); 
   };
   const openEditTeacher = (t: Teacher) => { 
     setTEditingId(t.id); 
-    const resolvedCampusId = t.campusId || campus?.id;
     setTForm({ 
       name: t.name, 
       email: t.email, 
+      password: "",
       phone: t.phone || "", 
-      subjects: t.subjects || [], 
-      availabilityByDay: t.availabilityByDay || {},
       campusId: t.campusId || "" 
     }); 
-    fetchTeacherOptions(resolvedCampusId);
     setTModalOpen(true); 
     setTab("teachers"); 
   };
@@ -194,18 +149,29 @@ const UsersPage = () => {
       return;
     }
 
+    if (!tEditingId) {
+      const rawPassword = String(tForm.password || "");
+      if (!rawPassword || rawPassword.length < 6) {
+        toast({ title: "Error", description: "Password is required and must be at least 6 characters", variant: "destructive" });
+        return;
+      }
+    } else if (tForm.password && String(tForm.password).length < 6) {
+      toast({ title: "Error", description: "Reset password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+
     setTSaving(true);
     const payload = {
-      ...tForm,
-      timeSlotIds: Array.from(new Set(Object.values(tForm.availabilityByDay || {}).flat())),
+      name: tForm.name,
+      email: tForm.email,
+      ...(tForm.password ? { password: tForm.password } : {}),
+      phone: tForm.phone,
       campusId: resolvedCampusId,
-      maxPerDay: 6,
-      maxPerWeek: 30,
     };
     try {
       if (tEditingId) {
         await api.put(`/teachers/${tEditingId}`, payload);
-        toast({ title: "Teacher updated" });
+        toast({ title: tForm.password ? "Teacher updated and password reset" : "Teacher updated" });
       } else {
         await api.post(`/teachers`, payload);
         toast({ title: "Teacher created" });
@@ -230,18 +196,57 @@ const UsersPage = () => {
   };
 
   // Staff handlers
-  const openAddStaff = () => { setSEditingId(null); setSForm(defaultStaffForm); setSModalOpen(true); setTab("staff"); };
-  const openEditStaff = (s: Staff) => { setSEditingId(s.id); setSForm({ name: s.name, email: s.email, password: "", campusId: s.campusId || "" }); setSModalOpen(true); setTab("staff"); };
+  const openAddStaff = () => { setSEditingId(null); setSForm({ ...defaultStaffForm, campusIds: [] }); setSModalOpen(true); setTab("staff"); };
+  const openEditStaff = (s: Staff) => {
+    setSEditingId(s.id);
+    setSForm({
+      name: s.name,
+      email: s.email,
+      password: "",
+      campusIds: (s.campusIds && s.campusIds.length > 0) ? s.campusIds : (s.campusId ? [s.campusId] : []),
+    });
+    setSModalOpen(true);
+    setTab("staff");
+  };
+
+  const toggleStaffCampus = (campusId: string) => {
+    const selected = sForm.campusIds.includes(campusId);
+    setSForm({
+      ...sForm,
+      campusIds: selected
+        ? sForm.campusIds.filter((id) => id !== campusId)
+        : [...sForm.campusIds, campusId],
+    });
+  };
 
   const handleSaveStaff = async () => {
     if (!institution) { toast({ title: "Error", description: "Select an institution first", variant: "destructive" }); return; }
+
+    if (!sEditingId) {
+      const rawPassword = String(sForm.password || "");
+      if (!rawPassword || rawPassword.length < 6) {
+        toast({ title: "Error", description: "Password is required and must be at least 6 characters", variant: "destructive" });
+        return;
+      }
+    }
+
     setSSaving(true);
     try {
       if (sEditingId) {
-        await api.put(`/staff/${sEditingId}`, { name: sForm.name, email: sForm.email, campusId: sForm.campusId || null });
+        await api.put(`/staff/${sEditingId}`, {
+          name: sForm.name,
+          email: sForm.email,
+          campusIds: sForm.campusIds,
+        });
         toast({ title: "Staff updated" });
       } else {
-        await api.post(`/staff/create-with-user`, { name: sForm.name, email: sForm.email, password: sForm.password || undefined, institutionId: institution.id, campusId: sForm.campusId || undefined });
+        await api.post(`/staff/create-with-user`, {
+          name: sForm.name,
+          email: sForm.email,
+          password: sForm.password,
+          institutionId: institution.id,
+          campusIds: sForm.campusIds,
+        });
         toast({ title: "Staff created" });
       }
       setSModalOpen(false);
@@ -287,8 +292,6 @@ const UsersPage = () => {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
-                  <TableHead>Subjects</TableHead>
-                  <TableHead>Time Slots</TableHead>
                   <TableHead className="w-24">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -298,12 +301,6 @@ const UsersPage = () => {
                     <TableCell className="font-medium">{t.name}</TableCell>
                     <TableCell>{t.email}</TableCell>
                     <TableCell>{t.phone || "—"}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">{(t.subjects||[]).map(s => <Badge key={s} variant="secondary" className="text-xs">{getSubjectName(s)}</Badge>)}{(!t.subjects || t.subjects.length===0) && "—"}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">{getTeacherDayTimeLabels(t).map(label => <Badge key={`${t.id}-${label}`} variant="outline" className="text-xs">{label}</Badge>)}{getTeacherDayTimeLabels(t).length===0 && "—"}</div>
-                    </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" onClick={() => openEditTeacher(t)}><Pencil className="h-4 w-4"/></Button>
@@ -335,7 +332,13 @@ const UsersPage = () => {
                   <TableRow key={s.id}>
                     <TableCell className="font-medium">{s.name}</TableCell>
                     <TableCell>{s.email}</TableCell>
-                    <TableCell>{s.campusId || "—"}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {getCampusNames(s).map((name, index) => (
+                          <Badge key={`${s.id}-${index}-${name}`} variant="secondary" className="text-xs">{name}</Badge>
+                        ))}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" onClick={() => openEditStaff(s)}><Pencil className="h-4 w-4"/></Button>
@@ -352,149 +355,15 @@ const UsersPage = () => {
 
       {/* Teacher Modal */}
       <Dialog open={tModalOpen} onOpenChange={setTModalOpen}>
-        <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-hidden">
+        <DialogContent>
           <DialogHeader><DialogTitle>{tEditingId ? "Edit Teacher" : "Add Teacher"}</DialogTitle></DialogHeader>
-          <div className="space-y-4 overflow-y-auto pr-1 max-h-[72vh]">
+          <div className="space-y-4">
             <div className="space-y-2"><Label>Name</Label><Input value={tForm.name} onChange={(e)=>setTForm({...tForm,name:e.target.value})} /></div>
             <div className="space-y-2"><Label>Email</Label><Input type="email" value={tForm.email} onChange={(e)=>setTForm({...tForm,email:e.target.value})} /></div>
+            {!tEditingId && <div className="space-y-2"><Label>Password</Label><Input type="password" value={tForm.password} onChange={(e)=>setTForm({...tForm,password:e.target.value})} /><p className="text-xs text-muted-foreground">Minimum 6 characters.</p></div>}
+            {tEditingId && <div className="space-y-2"><Label>Reset Password (optional)</Label><Input type="password" value={tForm.password} onChange={(e)=>setTForm({...tForm,password:e.target.value})} placeholder="Leave blank to keep current password" /><p className="text-xs text-muted-foreground">Minimum 6 characters if provided.</p></div>}
             <div className="space-y-2"><Label>Phone</Label><Input value={tForm.phone} onChange={(e)=>setTForm({...tForm,phone:e.target.value})} /></div>
             {!campus && <div className="space-y-2"><Label>Campus ID</Label><Input value={tForm.campusId} onChange={(e)=>setTForm({...tForm,campusId:e.target.value})} placeholder="paste campus id" /></div>}
-            <div className="space-y-2">
-              <Label>Subjects</Label>
-              <div className="rounded-md border border-input p-3 space-y-3">
-                <div className="flex items-center justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setTForm({ ...tForm, subjects: subjectOptions.map((subject) => subject.id) })}
-                  >
-                    Select all
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setTForm({ ...tForm, subjects: [] })}
-                  >
-                    Clear
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {subjectOptions.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No subjects found. Add subjects first.</p>
-                  ) : (
-                    subjectOptions.map((subject) => {
-                      const selected = tForm.subjects.includes(subject.id);
-                      return (
-                        <Button
-                          key={subject.id}
-                          type="button"
-                          variant={selected ? "default" : "outline"}
-                          size="sm"
-                          className={cn("h-8", !selected && "text-muted-foreground")}
-                          onClick={() => {
-                            const nextSubjects = selected
-                              ? tForm.subjects.filter((id) => id !== subject.id)
-                              : [...tForm.subjects, subject.id];
-                            setTForm({ ...tForm, subjects: nextSubjects });
-                          }}
-                        >
-                          {subject.name}
-                        </Button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">Click subjects to add/remove them for this teacher.</p>
-            </div>
-            <div className="space-y-2">
-              <Label>Time Slots by Working Day</Label>
-              <div className="rounded-md border border-input p-3 space-y-4">
-                {workingDays.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No working days found. Add working days first.</p>
-                ) : (
-                  workingDays.map((day) => (
-                    <div key={day.id} className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium">{day.dayName}</p>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => {
-                              setTForm({
-                                ...tForm,
-                                availabilityByDay: {
-                                  ...tForm.availabilityByDay,
-                                  [day.id]: timeSlotOptions.map((slot) => slot.id),
-                                },
-                              });
-                            }}
-                          >
-                            Select all
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => {
-                              setTForm({
-                                ...tForm,
-                                availabilityByDay: {
-                                  ...tForm.availabilityByDay,
-                                  [day.id]: [],
-                                },
-                              });
-                            }}
-                          >
-                            Clear
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {timeSlotOptions.map((slot) => {
-                          const selected = (tForm.availabilityByDay?.[day.id] || []).includes(slot.id);
-                          const label = `${slot.startTime} - ${slot.endTime}${slot.isBreak ? " (Break)" : ""}`;
-                          return (
-                            <Button
-                              key={`${day.id}-${slot.id}`}
-                              type="button"
-                              variant={selected ? "default" : "outline"}
-                              size="sm"
-                              className={cn("h-8", !selected && "text-muted-foreground")}
-                              onClick={() => {
-                                const daySlots = tForm.availabilityByDay?.[day.id] || [];
-                                const nextDaySlots = daySlots.includes(slot.id)
-                                  ? daySlots.filter((id) => id !== slot.id)
-                                  : [...daySlots, slot.id];
-
-                                setTForm({
-                                  ...tForm,
-                                  availabilityByDay: {
-                                    ...tForm.availabilityByDay,
-                                    [day.id]: nextDaySlots,
-                                  },
-                                });
-                              }}
-                            >
-                              {label}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">Select day and time together for teacher availability.</p>
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={()=>setTModalOpen(false)}>Cancel</Button>
@@ -513,7 +382,53 @@ const UsersPage = () => {
             <div className="space-y-2"><Label>Name</Label><Input value={sForm.name} onChange={(e)=>setSForm({...sForm,name:e.target.value})} /></div>
             <div className="space-y-2"><Label>Email</Label><Input type="email" value={sForm.email} onChange={(e)=>setSForm({...sForm,email:e.target.value})} /></div>
             {!sEditingId && <div className="space-y-2"><Label>Password</Label><Input type="password" value={sForm.password} onChange={(e)=>setSForm({...sForm,password:e.target.value})} /></div>}
-            <div className="space-y-2"><Label>Campus ID (optional)</Label><Input value={sForm.campusId} onChange={(e)=>setSForm({...sForm,campusId:e.target.value})} placeholder="paste campus id or leave empty"/></div>
+            <div className="space-y-2">
+              <Label>Campuses (optional)</Label>
+              <div className="rounded-md border border-input p-3 space-y-3">
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setSForm({ ...sForm, campusIds: campusOptions.map((item) => item.id) })}
+                    disabled={campusOptions.length === 0}
+                  >
+                    Select all
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setSForm({ ...sForm, campusIds: [] })}
+                  >
+                    Clear
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {campusOptions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No campuses found for this institution.</p>
+                  ) : (
+                    campusOptions.map((item) => {
+                      const selected = sForm.campusIds.includes(item.id);
+                      return (
+                        <Button
+                          key={item.id}
+                          type="button"
+                          variant={selected ? "default" : "outline"}
+                          size="sm"
+                          className={cn("h-8", !selected && "text-muted-foreground")}
+                          onClick={() => toggleStaffCampus(item.id)}
+                        >
+                          {item.name}{item.location ? ` (${item.location})` : ""}
+                        </Button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={()=>setSModalOpen(false)}>Cancel</Button>

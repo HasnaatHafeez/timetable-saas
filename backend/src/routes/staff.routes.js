@@ -11,12 +11,12 @@ const {
 const router = express.Router();
 
 // Query by institutionId: /api/staff?institutionId=...
-router.get("/", auth, role(["INSTITUTION_OWNER", "STAFF_ADMIN"]), getStaffByInstitution);
+router.get("/", auth, role(["INSTITUTION_OWNER"]), getStaffByInstitution);
 
 // Create staff and user
-router.post("/create-with-user", auth, role(["INSTITUTION_OWNER", "STAFF_ADMIN"]), createStaffWithUser);
+router.post("/create-with-user", auth, role(["INSTITUTION_OWNER"]), createStaffWithUser);
 
-router.put("/:id", auth, role(["INSTITUTION_OWNER", "STAFF_ADMIN"]), updateStaff);
-router.delete("/:id", auth, role(["INSTITUTION_OWNER", "STAFF_ADMIN"]), deleteStaff);
+router.put("/:id", auth, role(["INSTITUTION_OWNER"]), updateStaff);
+router.delete("/:id", auth, role(["INSTITUTION_OWNER"]), deleteStaff);
 
 module.exports = router;

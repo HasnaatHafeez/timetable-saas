@@ -49,16 +49,6 @@ const App = () => (
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
-                {/* Protected routes */}
-                <Route
-                  path="/setup"
-                  element={
-                    <ProtectedRoute>
-                      <InstitutionSetupPage />
-                    </ProtectedRoute>
-                  }
-                />
-
                 {/* Protected dashboard routes */}
                 <Route
                   element={
@@ -68,8 +58,16 @@ const App = () => (
                   }
                 >
                 <Route path="/dashboard" element={<RoleDashboardPage />} />
+                <Route path="/setup" element={<InstitutionSetupPage />} />
                 <Route path="/teachers" element={<TeachersPage />} />
-                <Route path="/users" element={<UsersPage />} />
+                <Route
+                  path="/users"
+                  element={
+                    <RoleProtectedRoute allowedBackendRoles={["INSTITUTION_OWNER"]}>
+                      <UsersPage />
+                    </RoleProtectedRoute>
+                  }
+                />
                 <Route path="/subjects" element={<SubjectsPage />} />
                 <Route path="/departments" element={<DepartmentsPage />} />
                 <Route path="/rooms" element={<RoomsPage />} />

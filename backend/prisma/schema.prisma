@@ -57,6 +57,7 @@ model Institution {
 
   campuses  Campus[]
   staffs    Staff[]
+  timetableGenerationSettings TimetableGenerationSetting[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -75,8 +76,10 @@ model Campus {
   rooms         Room[]
   timeSlots     TimeSlot[]
   workingDays   WorkingDay[]
+  holidays      Holiday[]
   academicLevels AcademicLevel[]
   staffs        Staff[]
+  staffCampusLinks StaffCampus[]
 
   createdAt DateTime @default(now())
 }
@@ -157,8 +160,20 @@ model Staff {
   user         User        @relation(fields: [userId], references: [id])
   institution  Institution @relation(fields: [institutionId], references: [id])
   campus       Campus?     @relation(fields: [campusId], references: [id])
+  campusLinks  StaffCampus[]
 
   createdAt DateTime @default(now())
+}
+
+model StaffCampus {
+  id       String @id @default(uuid())
+  staffId  String
+  campusId String
+
+  staff    Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  campus   Campus @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, campusId])
 }
 model TeacherAvailability {
   id         String  @id @default(uuid())
@@ -208,6 +223,19 @@ model WorkingDay {
   campus   Campus @relation(fields: [campusId], references: [id])
 }
 
+model Holiday {
+  id       String   @id @default(uuid())
+  campusId String
+  date     DateTime
+  name     String
+
+  campus   Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([campusId, date])
+}
+
 model Timetable {
   id              String @id @default(uuid())
   campusId        String
@@ -227,6 +255,26 @@ model Timetable {
   timeSlot   TimeSlot   @relation(fields: [timeSlotId], references: [id])
 
   createdAt DateTime @default(now())
+}
+
+model TimetableGenerationSetting {
+  id                      String          @id @default(uuid())
+  institutionId           String
+  institutionType         InstitutionType
+  generationScope         String          @default("CLASS")
+  changeRoomEveryLecture  Boolean         @default(false)
+  selectedClassName       String?
+  selectedAcademicLevelId String?
+  selectedSectionId       String?
+  subjectWeeklyLectures   Json?
+  updatedByUserId         String?
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([institutionId, institutionType])
 }
 model TeacherSubject {
   id         String @id @default(uuid())

@@ -12,6 +12,7 @@ import { useInstitution, type Institution, type Campus } from "@/contexts/Instit
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import PageHeader from "@/components/PageHeader";
 
 const InstitutionSetupPage = () => {
   const [institutions, setInstitutions] = useState<Institution[]>([]);
@@ -258,16 +259,16 @@ const InstitutionSetupPage = () => {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-screen"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    return <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gradient-to-br from-primary/10 to-accent/10 p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold text-foreground mb-2">Institution Setup</h1>
-          <p className="text-muted-foreground">Select your institution and campus to get started</p>
-        </div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      <div className="max-w-6xl">
+        <PageHeader
+          title="Institution"
+          description="Select and manage your institution and campuses"
+        />
 
         {institutions.length === 0 ? (
           <Card className="text-center py-12">
