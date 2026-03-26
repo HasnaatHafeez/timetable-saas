@@ -35,6 +35,13 @@ enum TimetableStatus {
   LOCKED
 }
 
+enum AuditLogType {
+  USER_ACTION
+  SECURITY
+  SYSTEM
+  ERROR
+}
+
 model User {
   id        String @id @default(uuid())
   name      String
@@ -72,12 +79,16 @@ model Campus {
   institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
 
   departments   Department[]
+  subjects      Subject[]
   teachers      Teacher[]
+  sections      Section[]
   rooms         Room[]
   timeSlots     TimeSlot[]
   workingDays   WorkingDay[]
   holidays      Holiday[]
   academicLevels AcademicLevel[]
+  timetables    Timetable[]
+  teacherAvailabilities TeacherAvailability[]
   staffs        Staff[]
   staffCampusLinks StaffCampus[]
 
@@ -91,16 +102,24 @@ model AcademicLevel {
 
   campus   Campus @relation(fields: [campusId], references: [id])
   sections Section[]
+  timetables Timetable[]
+
+  @@index([campusId])
 }
 
 model Section {
   id              String @id @default(uuid())
+  campusId        String
   academicLevelId String
   name            String
   sectionCode     String?
 
+  campus          Campus @relation(fields: [campusId], references: [id])
   academicLevel   AcademicLevel @relation(fields: [academicLevelId], references: [id])
   sectionSubjects SectionSubject[]
+  timetables      Timetable[]
+
+  @@index([campusId])
 }
 
 model Department {
@@ -109,19 +128,25 @@ model Department {
   name     String
   campus   Campus @relation(fields: [campusId], references: [id])
   subjects Subject[]
+
+  @@index([campusId])
 }
 
 model Subject {
   id           String @id @default(uuid())
+  campusId     String
   departmentId String
   name         String
   type         SubjectType
   weeklyHours  Int
 
+  campus       Campus @relation(fields: [campusId], references: [id])
   department   Department @relation(fields: [departmentId], references: [id])
   teacherSubjects TeacherSubject[]
   sectionSubjects SectionSubject[]
   timetables   Timetable[]
+
+  @@index([campusId])
 }
 
 model SectionSubject {
@@ -149,6 +174,8 @@ model Teacher {
   teacherSubjects TeacherSubject[]
   teacherAvailability TeacherAvailability[]
   timetables  Timetable[]
+
+  @@index([campusId])
 }
 
 model Staff {
@@ -177,16 +204,19 @@ model StaffCampus {
 }
 model TeacherAvailability {
   id         String  @id @default(uuid())
+  campusId   String
   teacherId  String
   dayId      String
   timeSlotId String
   isAvailable Boolean @default(true)
 
-  teacher    Teacher   @relation(fields: [teacherId], references: [id])
+  campus     Campus     @relation(fields: [campusId], references: [id])
+  teacher    Teacher    @relation(fields: [teacherId], references: [id])
   day        WorkingDay @relation(fields: [dayId], references: [id])
   timeSlot   TimeSlot   @relation(fields: [timeSlotId], references: [id])
 
   @@unique([teacherId, dayId, timeSlotId])
+  @@index([campusId])
 }
 model Room {
   id       String @id @default(uuid())
@@ -197,6 +227,8 @@ model Room {
 
   campus   Campus @relation(fields: [campusId], references: [id])
   timetables Timetable[]
+
+  @@index([campusId])
 }
 
 model TimeSlot {
@@ -210,6 +242,8 @@ model TimeSlot {
   timetables Timetable[]
 
   campus   Campus @relation(fields: [campusId], references: [id])
+
+  @@index([campusId])
 }
 
 model WorkingDay {
@@ -221,6 +255,8 @@ model WorkingDay {
   timetables Timetable[]
 
   campus   Campus @relation(fields: [campusId], references: [id])
+
+  @@index([campusId])
 }
 
 model Holiday {
@@ -248,13 +284,18 @@ model Timetable {
   timeSlotId      String
   status          TimetableStatus
 
-  subject    Subject    @relation(fields: [subjectId], references: [id])
-  teacher    Teacher    @relation(fields: [teacherId], references: [id])
-  room       Room       @relation(fields: [roomId], references: [id])
-  day        WorkingDay @relation(fields: [dayId], references: [id])
-  timeSlot   TimeSlot   @relation(fields: [timeSlotId], references: [id])
+  campus     Campus      @relation(fields: [campusId], references: [id])
+  academicLevel AcademicLevel @relation(fields: [academicLevelId], references: [id])
+  section    Section     @relation(fields: [sectionId], references: [id])
+  subject    Subject     @relation(fields: [subjectId], references: [id])
+  teacher    Teacher     @relation(fields: [teacherId], references: [id])
+  room       Room        @relation(fields: [roomId], references: [id])
+  day        WorkingDay  @relation(fields: [dayId], references: [id])
+  timeSlot   TimeSlot    @relation(fields: [timeSlotId], references: [id])
 
   createdAt DateTime @default(now())
+
+  @@index([campusId])
 }
 
 model TimetableGenerationSetting {
@@ -285,5 +326,22 @@ model TeacherSubject {
   subject    Subject @relation(fields: [subjectId], references: [id])
 
   @@unique([teacherId, subjectId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  campusId  String?
+  type      AuditLogType @default(USER_ACTION)
+  model     String
+  action    String
+  description String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([campusId])
+  @@index([type])
+  @@index([createdAt])
 }
 

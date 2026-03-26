@@ -1,5 +1,6 @@
 const express = require("express");
 const auth = require("../middlewares/auth.middleware");
+const tenant = require("../middlewares/tenant.middleware");
 const role = require("../middlewares/role.middleware");
 const {
   getTeachers,
@@ -11,10 +12,10 @@ const {
 
 const router = express.Router();
 
-router.get("/", auth, getTeachers);
-router.get("/:id", auth, getTeacherById);
-router.post("/", auth, role(["INSTITUTION_OWNER"]), createTeacher);
-router.put("/:id", auth, role(["INSTITUTION_OWNER"]), updateTeacher);
-router.delete("/:id", auth, role(["INSTITUTION_OWNER"]), deleteTeacher);
+router.get("/", auth, tenant, getTeachers);
+router.get("/:id", auth, tenant, getTeacherById);
+router.post("/", auth, tenant, role(["INSTITUTION_OWNER"]), createTeacher);
+router.put("/:id", auth, tenant, role(["INSTITUTION_OWNER"]), updateTeacher);
+router.delete("/:id", auth, tenant, role(["INSTITUTION_OWNER"]), deleteTeacher);
 
 module.exports = router;

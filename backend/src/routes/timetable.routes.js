@@ -1,5 +1,6 @@
 const express = require("express");
 const auth = require("../middlewares/auth.middleware");
+const tenant = require("../middlewares/tenant.middleware");
 const role = require("../middlewares/role.middleware");
 const {
   generateTimetable,
@@ -13,11 +14,12 @@ const {
 
 const router = express.Router();
 
-router.get("/", auth, getTimetable);
-router.get("/history", auth, getTimetableHistory);
+router.get("/", auth, tenant, getTimetable);
+router.get("/history", auth, tenant, getTimetableHistory);
 router.get(
   "/settings",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   getTimetableGenerationSettings
 );
@@ -25,6 +27,7 @@ router.get(
 router.post(
   "/settings",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   saveTimetableGenerationSettings
 );
@@ -32,6 +35,7 @@ router.post(
 router.post(
   "/generate",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   generateTimetable
 );
@@ -39,6 +43,7 @@ router.post(
 router.put(
   "/:id",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   updateTimetableEntry
 );
@@ -46,6 +51,7 @@ router.put(
 router.delete(
   "/:id",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   deleteTimetableEntry
 );

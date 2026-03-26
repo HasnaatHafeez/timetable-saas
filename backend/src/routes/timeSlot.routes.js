@@ -1,5 +1,6 @@
 const express = require("express");
 const auth = require("../middlewares/auth.middleware");
+const tenant = require("../middlewares/tenant.middleware");
 const role = require("../middlewares/role.middleware");
 const {
   getTimeSlots,
@@ -11,12 +12,13 @@ const {
 
 const router = express.Router();
 
-router.get("/", auth, getTimeSlots);
-router.get("/:id", auth, getTimeSlotById);
+router.get("/", auth, tenant, getTimeSlots);
+router.get("/:id", auth, tenant, getTimeSlotById);
 
 router.post(
   "/",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   createTimeSlot
 );
@@ -24,6 +26,7 @@ router.post(
 router.post(
   "/create",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   createTimeSlot
 );
@@ -31,6 +34,7 @@ router.post(
 router.put(
   "/:id",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   updateTimeSlot
 );
@@ -38,6 +42,7 @@ router.put(
 router.delete(
   "/:id",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   deleteTimeSlot
 );

@@ -1,4 +1,6 @@
 const prisma = require("../prisma/client");
+const { generateCollegeTimetable } = require("../engines/college.engine");
+const { generateSchoolTimetable } = require("../engines/school.engine");
 
 const WEEK_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
@@ -304,298 +306,39 @@ exports.deleteTimetableEntry = async (req, res) => {
 
 exports.generateTimetable = async (req, res) => {
   try {
-    const {
-      campusId,
-      sectionId,
-      generationScope = "CLASS",
-      changeRoomEveryLecture = false,
-      subjectWeeklyLectures = {},
-    } = req.body || {};
+    const { campusId } = req.body || {};
 
     if (!campusId) {
       return res.status(400).json({ message: "campusId is required" });
     }
 
-    const campus = await prisma.campus.findUnique({ where: { id: campusId } });
+    const campus = await prisma.campus.findUnique({
+      where: { id: campusId },
+      include: { institution: true },
+    });
+
     if (!campus) {
       return res.status(400).json({ message: "Invalid campusId" });
     }
 
-    const departments = await prisma.department.findMany({
-      where: { campusId },
-      select: { id: true },
-    });
-    const departmentIds = departments.map((item) => item.id);
+    const institutionType = String(campus?.institution?.type || "").toUpperCase();
 
-    const subjects = await prisma.subject.findMany({
-      where: {
-        departmentId: { in: departmentIds },
-      },
-    });
-    const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
-
-    const teachers = await prisma.teacher.findMany({
-      where: { campusId },
-      include: { teacherSubjects: true },
-    });
-
-    const rooms = await prisma.room.findMany({ where: { campusId } });
-    const rawDays = await prisma.workingDay.findMany({ where: { campusId } });
-    const rawTimeSlots = await prisma.timeSlot.findMany({ where: { campusId, isBreak: false } });
-    const days = sortDaysMondayFirst(rawDays);
-    const timeSlots = sortTimeSlotsChronologically(rawTimeSlots);
-
-    if (teachers.length === 0 || rooms.length === 0 || days.length === 0 || timeSlots.length === 0) {
-      return res.status(400).json({ message: "Teachers, rooms, working days, and non-break timeslots are required" });
-    }
-
-    let targetSections = [];
-    const normalizedScope = String(generationScope || "CLASS").toUpperCase();
-
-    if (normalizedScope === "INSTITUTE") {
-      const levels = await prisma.academicLevel.findMany({
-        where: { campusId },
-        select: { id: true },
-      });
-      const levelIds = levels.map((level) => level.id);
-
-      targetSections = await prisma.section.findMany({
-        where: { academicLevelId: { in: levelIds } },
-        select: { id: true, academicLevelId: true },
-      });
-
-      if (targetSections.length === 0) {
-        return res.status(400).json({ message: "No sections found for this campus" });
-      }
-
-      await prisma.timetable.deleteMany({
-        where: { campusId, status: "DRAFT" },
-      });
-    } else {
-      if (!sectionId) {
-        return res.status(400).json({ message: "sectionId is required for class-wise generation" });
-      }
-
-      const section = await prisma.section.findUnique({
-        where: { id: sectionId },
-        select: { id: true, academicLevelId: true },
-      });
-
-      if (!section) {
-        return res.status(400).json({ message: "Invalid sectionId" });
-      }
-
-      const level = await prisma.academicLevel.findUnique({ where: { id: section.academicLevelId } });
-      if (!level || level.campusId !== campusId) {
-        return res.status(400).json({ message: "sectionId does not belong to selected campus" });
-      }
-
-      targetSections = [section];
-
-      await prisma.timetable.deleteMany({
-        where: {
-          campusId,
-          sectionId: section.id,
-          academicLevelId: section.academicLevelId,
-          status: "DRAFT",
-        },
+    if (institutionType === "COLLEGE") {
+      return generateCollegeTimetable(req, res, campusId, {
+        sortDaysMondayFirst,
+        sortTimeSlotsChronologically,
       });
     }
 
-    let totalEntries = 0;
-    const batchCreatedAt = new Date();
-
-    for (const section of targetSections) {
-      const sectionSubjectLinks = await prisma.sectionSubject.findMany({
-        where: { sectionId: section.id },
-        select: { subjectId: true },
-      });
-
-      const sectionSubjects = sectionSubjectLinks
-        .map((link) => subjectById.get(link.subjectId))
-        .filter(Boolean);
-
-      if (sectionSubjects.length === 0) {
-        if (normalizedScope === "CLASS") {
-          return res.status(400).json({ message: "No subjects assigned to selected class/section" });
-        }
-        continue;
-      }
-
-      const sectionScheduled = [];
-      const fixedRoomBySubject = new Map();
-      const roomRotationCursorBySubject = new Map();
-
-      for (const subject of sectionSubjects) {
-        const overrideHours = Number(subjectWeeklyLectures?.[subject.id]);
-        const plannedLectures = Number.isFinite(overrideHours)
-          ? Math.max(0, Math.floor(overrideHours))
-          : Number(subject.weeklyHours) || 0;
-        let remainingHours = plannedLectures;
-        const subjectKey = `${section.id}:${subject.id}`;
-
-        if (remainingHours <= 0) {
-          continue;
-        }
-
-        while (remainingHours > 0) {
-          let placed = false;
-
-          for (const day of days) {
-            for (const slot of timeSlots) {
-              const sectionClash = sectionScheduled.find(
-                (item) => item.dayId === day.id && item.timeSlotId === slot.id
-              );
-              if (sectionClash) continue;
-
-              const sameSubjectSameDay = sectionScheduled.find(
-                (item) => item.dayId === day.id && item.subjectId === subject.id
-              );
-              if (sameSubjectSameDay) continue;
-
-              const teacher = teachers.find((item) =>
-                item.teacherSubjects.some((link) => link.subjectId === subject.id)
-              );
-              if (!teacher) continue;
-
-              const availability = await prisma.teacherAvailability.findFirst({
-                where: {
-                  teacherId: teacher.id,
-                  dayId: day.id,
-                  timeSlotId: slot.id,
-                  isAvailable: true,
-                },
-              });
-              if (!availability) continue;
-
-              const teacherClash = await prisma.timetable.findFirst({
-                where: {
-                  teacherId: teacher.id,
-                  dayId: day.id,
-                  timeSlotId: slot.id,
-                  status: "DRAFT",
-                },
-              });
-              if (teacherClash) continue;
-
-              const teacherDayCount = await prisma.timetable.count({
-                where: {
-                  teacherId: teacher.id,
-                  dayId: day.id,
-                  status: "DRAFT",
-                },
-              });
-              if (teacherDayCount >= teacher.maxPerDay) continue;
-
-              const teacherWeekCount = await prisma.timetable.count({
-                where: {
-                  teacherId: teacher.id,
-                  status: "DRAFT",
-                },
-              });
-              if (teacherWeekCount >= teacher.maxPerWeek) continue;
-
-              const roomCandidates = rooms.filter((room) =>
-                subject.type === "LAB" ? room.type === "LAB" : room.type === "CLASSROOM"
-              );
-              if (roomCandidates.length === 0) continue;
-
-              let selectedRoom = null;
-
-              if (changeRoomEveryLecture) {
-                const startCursor = roomRotationCursorBySubject.get(subjectKey) || 0;
-                for (let offset = 0; offset < roomCandidates.length; offset++) {
-                  const idx = (startCursor + offset) % roomCandidates.length;
-                  const candidate = roomCandidates[idx];
-
-                  const roomClash = await prisma.timetable.findFirst({
-                    where: {
-                      roomId: candidate.id,
-                      dayId: day.id,
-                      timeSlotId: slot.id,
-                      status: "DRAFT",
-                    },
-                  });
-
-                  if (!roomClash) {
-                    selectedRoom = candidate;
-                    roomRotationCursorBySubject.set(subjectKey, (idx + 1) % roomCandidates.length);
-                    break;
-                  }
-                }
-              } else {
-                const fixedRoomId = fixedRoomBySubject.get(subjectKey);
-                if (fixedRoomId) {
-                  const roomClash = await prisma.timetable.findFirst({
-                    where: {
-                      roomId: fixedRoomId,
-                      dayId: day.id,
-                      timeSlotId: slot.id,
-                      status: "DRAFT",
-                    },
-                  });
-                  if (!roomClash) {
-                    selectedRoom = roomCandidates.find((room) => room.id === fixedRoomId) || null;
-                  }
-                }
-
-                if (!selectedRoom) {
-                  for (const candidate of roomCandidates) {
-                    const roomClash = await prisma.timetable.findFirst({
-                      where: {
-                        roomId: candidate.id,
-                        dayId: day.id,
-                        timeSlotId: slot.id,
-                        status: "DRAFT",
-                      },
-                    });
-
-                    if (!roomClash) {
-                      selectedRoom = candidate;
-                      fixedRoomBySubject.set(subjectKey, candidate.id);
-                      break;
-                    }
-                  }
-                }
-              }
-
-              if (!selectedRoom) continue;
-
-              const entry = await prisma.timetable.create({
-                data: {
-                  campusId,
-                  academicLevelId: section.academicLevelId,
-                  sectionId: section.id,
-                  subjectId: subject.id,
-                  teacherId: teacher.id,
-                  roomId: selectedRoom.id,
-                  dayId: day.id,
-                  timeSlotId: slot.id,
-                  status: "DRAFT",
-                  createdAt: batchCreatedAt,
-                },
-              });
-
-              sectionScheduled.push(entry);
-              totalEntries++;
-              remainingHours--;
-              placed = true;
-              break;
-            }
-            if (placed) break;
-          }
-
-          if (!placed) break;
-        }
-      }
+    if (institutionType === "SCHOOL") {
+      return generateSchoolTimetable(req, res, campusId);
     }
 
-    return res.json({
-      message: "Timetable generated",
-      scope: normalizedScope,
-      totalEntries,
-      changeRoomEveryLecture: !!changeRoomEveryLecture,
-    });
+    if (institutionType === "UNIVERSITY") {
+      return res.json({ message: "University engine not implemented yet" });
+    }
+
+    return res.status(400).json({ message: "Unsupported institution type" });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Failed to generate timetable", error: error.message });

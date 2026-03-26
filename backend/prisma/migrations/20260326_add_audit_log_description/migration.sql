@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE "AuditLog"
+ADD COLUMN IF NOT EXISTS "description" TEXT;
+
+COMMIT;

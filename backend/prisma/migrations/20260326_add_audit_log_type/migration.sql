@@ -1,0 +1,15 @@
+BEGIN;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'AuditLogType') THEN
+    CREATE TYPE "AuditLogType" AS ENUM ('USER_ACTION', 'SECURITY', 'SYSTEM', 'ERROR');
+  END IF;
+END $$;
+
+ALTER TABLE "AuditLog"
+ADD COLUMN IF NOT EXISTS "type" "AuditLogType" NOT NULL DEFAULT 'USER_ACTION';
+
+CREATE INDEX IF NOT EXISTS "AuditLog_type_idx" ON "AuditLog"("type");
+
+COMMIT;

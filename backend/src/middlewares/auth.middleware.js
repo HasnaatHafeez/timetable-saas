@@ -39,6 +39,10 @@ module.exports = async (req, res, next) => {
       req.staffCampusIds = staffCampusIds;
       req.staffInstitutionId = staff.institutionId;
 
+      if (!req.user.campusId && staffCampusIds.length === 1) {
+        req.user.campusId = staffCampusIds[0];
+      }
+
       const requestedInstitutionId = req.body?.institutionId ?? req.query?.institutionId;
       if (requestedInstitutionId && requestedInstitutionId !== staff.institutionId) {
         return res.status(403).json({ message: "Access denied for this institution" });

@@ -1,5 +1,6 @@
 const express = require("express");
 const auth = require("../middlewares/auth.middleware");
+const tenant = require("../middlewares/tenant.middleware");
 const {
   getSections,
   getSectionById,
@@ -10,10 +11,10 @@ const {
 
 const router = express.Router();
 
-router.get("/", auth, getSections);
-router.get("/:id", auth, getSectionById);
-router.post("/", auth, createSection);
-router.put("/:id", auth, updateSection);
-router.delete("/:id", auth, deleteSection);
+router.get("/", auth, tenant, getSections);
+router.get("/:id", auth, tenant, getSectionById);
+router.post("/", auth, tenant, createSection);
+router.put("/:id", auth, tenant, updateSection);
+router.delete("/:id", auth, tenant, deleteSection);
 
 module.exports = router;

@@ -1,5 +1,6 @@
 const express = require("express");
 const auth = require("../middlewares/auth.middleware");
+const tenant = require("../middlewares/tenant.middleware");
 const {
   getCampuses,
   getCampusById,
@@ -20,7 +21,7 @@ router.put("/:id", auth, updateCampus);
 router.delete("/:id", auth, deleteCampus);
 
 // Academic levels
-router.get("/levels/list", auth, getAcademicLevels);
-router.post("/levels", auth, createAcademicLevel);
+router.get("/levels/list", auth, tenant, getAcademicLevels);
+router.post("/levels", auth, tenant, createAcademicLevel);
 
 module.exports = router;

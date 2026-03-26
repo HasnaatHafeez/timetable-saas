@@ -1,5 +1,6 @@
 const express = require("express");
 const auth = require("../middlewares/auth.middleware");
+const tenant = require("../middlewares/tenant.middleware");
 const role = require("../middlewares/role.middleware");
 const {
   getAcademicLevels,
@@ -11,12 +12,13 @@ const {
 
 const router = express.Router();
 
-router.get("/", auth, getAcademicLevels);
-router.get("/:id", auth, getAcademicLevelById);
+router.get("/", auth, tenant, getAcademicLevels);
+router.get("/:id", auth, tenant, getAcademicLevelById);
 
 router.post(
   "/",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   createAcademicLevel
 );
@@ -24,6 +26,7 @@ router.post(
 router.post(
   "/create",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   createAcademicLevel
 );
@@ -31,6 +34,7 @@ router.post(
 router.put(
   "/:id",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   updateAcademicLevel
 );
@@ -38,6 +42,7 @@ router.put(
 router.delete(
   "/:id",
   auth,
+  tenant,
   role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
   deleteAcademicLevel
 );
