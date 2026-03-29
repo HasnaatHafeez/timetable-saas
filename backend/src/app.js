@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const { createRateLimitMiddleware } = require("./middlewares/rateLimit.middleware");
+const auth = require("./middlewares/auth.middleware");
+const { switchCampus } = require("./controllers/auth.controller");
 
 const authRoutes = require("./routes/auth.routes");
 const protectedRoutes = require("./routes/protected.routes");
@@ -21,6 +23,8 @@ const staffRoutes = require("./routes/staff.routes");
 const adminRoutes = require("./routes/admin.routes");
 const usersRoutes = require("./routes/users.routes");
 const auditLogRoutes = require("./routes/auditLog.routes");
+const billingRoutes = require("./routes/billing.routes");
+const inviteRoutes = require("./routes/invite.routes");
 
 const app = express();
 
@@ -29,6 +33,7 @@ app.use(express.json());
 app.use("/api", createRateLimitMiddleware());
 
 app.use("/api/auth", authRoutes);
+app.post("/api/switch-campus", auth, switchCampus);
 app.use("/api/protected", protectedRoutes);
 app.use("/api/institutions", institutionRoutes);
 app.use("/api/campuses", campusRoutes);
@@ -51,7 +56,8 @@ app.use("/api/staff", staffRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
-
+app.use("/api/billing", billingRoutes);
+app.use("/api/invites", inviteRoutes);
 
 app.get("/", (req, res) => {
   res.send("Backend Running");

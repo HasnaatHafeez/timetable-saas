@@ -1,4 +1,5 @@
 const prisma = require("../prisma/client");
+// DO NOT add role-based checks here. Use RBAC middleware.
 
 const ALLOWED_TYPES = new Set(["USER_ACTION", "SECURITY", "SYSTEM", "ERROR"]);
 const MAX_LIMIT = 100;
@@ -17,27 +18,6 @@ const parseDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const getAccessScope = (req) => {
-  const role = req.user?.role;
-
-  // SUPER_ADMIN equivalent in this backend: SYSTEM_ADMIN
-  if (role === "SYSTEM_ADMIN") {
-    return { canViewAllInCampus: true, restrictToUserId: null };
-  }
-
-  // ADMIN equivalent in this backend: INSTITUTION_OWNER
-  if (role === "INSTITUTION_OWNER") {
-    return { canViewAllInCampus: true, restrictToUserId: null };
-  }
-
-  // STAFF and teachers can only see their own logs.
-  if (role === "STAFF_ADMIN" || role === "TEACHER") {
-    return { canViewAllInCampus: false, restrictToUserId: req.user?.id || null };
-  }
-
-  return { canViewAllInCampus: false, restrictToUserId: null };
-};
-
 exports.getAuditLogs = async (req, res) => {
   try {
     const campusId = req.campusId;
@@ -45,8 +25,11 @@ exports.getAuditLogs = async (req, res) => {
       return res.status(400).json({ message: "campusId is required" });
     }
 
-    const accessScope = getAccessScope(req);
-    if (!accessScope.canViewAllInCampus && !accessScope.restrictToUserId) {
+    const scope = req.scope;
+    const isAllScope = scope?.type === "ALL";
+    const ownScopeUserId = scope?.type === "OWN" ? String(scope.userId || "").trim() : "";
+
+    if (!isAllScope && !ownScopeUserId) {
       return res.status(403).json({ message: "Access denied" });
     }
 
@@ -79,14 +62,14 @@ exports.getAuditLogs = async (req, res) => {
 
     if (req.query?.userId) {
       const requestedUserId = String(req.query.userId).trim();
-      if (!accessScope.canViewAllInCampus && requestedUserId !== accessScope.restrictToUserId) {
+      if (!isAllScope && requestedUserId !== ownScopeUserId) {
         return res.status(403).json({ message: "Access denied" });
       }
       where.userId = requestedUserId;
     }
 
-    if (!accessScope.canViewAllInCampus && accessScope.restrictToUserId) {
-      where.userId = accessScope.restrictToUserId;
+    if (!isAllScope && ownScopeUserId) {
+      where.userId = ownScopeUserId;
     }
 
     const fromDate = parseDate(req.query?.fromDate);

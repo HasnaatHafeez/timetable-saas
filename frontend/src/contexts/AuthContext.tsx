@@ -19,6 +19,7 @@ interface AuthContextType {
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
@@ -117,6 +118,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await api.post("/auth/forgot-password", { email });
   }, []);
 
+  const resetPassword = useCallback(async (token: string, newPassword: string) => {
+    await api.post("/auth/reset-password", { token, newPassword });
+  }, []);
+
   const updateProfile = useCallback(async (data: Partial<User>) => {
     const res = await api.put("/users/profile", data);
     const updated = res.data;
@@ -148,6 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signup,
         logout,
         forgotPassword,
+        resetPassword,
         updateProfile,
         changePassword,
       }}

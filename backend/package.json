@@ -8,7 +8,9 @@
     "start": "node src/server.js",
     "promote:system-admin": "node scripts/promote-system-admin.js",
     "reset:user-password": "node scripts/reset-user-password.js",
-    "test:security": "node --test test/tenant-isolation.security.test.js"
+    "test:auth": "node --test test/auth.controller.test.js",
+    "test:security": "node --test test/tenant-isolation.security.test.js",
+    "lint:rbac": "node scripts/rbac-lint.js"
   },
   "keywords": [],
   "author": "",
@@ -21,13 +23,13 @@
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^8.0.4",
     "prisma": "^6.19.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"
   },
   "prisma": {
-  "seed": "node prisma/seed.js"
-}
-  
+    "seed": "node prisma/seed.js"
+  }
 }

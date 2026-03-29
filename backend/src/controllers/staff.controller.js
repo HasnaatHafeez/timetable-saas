@@ -1,5 +1,6 @@
 const prisma = require("../prisma/client");
 const bcrypt = require("bcrypt");
+// DO NOT add role-based checks here. Use RBAC middleware.
 
 const normalizeCampusIds = (campusIds, campusId) => {
   const list = Array.isArray(campusIds) ? campusIds : (campusId ? [campusId] : []);
@@ -11,13 +12,27 @@ const getStaffCampusIds = (staffRecord) => {
   return [...new Set([...fromLinks, ...(staffRecord?.campusId ? [staffRecord.campusId] : [])])];
 };
 
+const canAccessStaffByScope = (req, staffRecord) => {
+  if (req.scope?.type !== "OWN") {
+    return true;
+  }
+
+  const targetCampusIds = getStaffCampusIds(staffRecord);
+  if (targetCampusIds.length === 0) {
+    return false;
+  }
+
+  const allowedCampusIds = Array.isArray(req.staffCampusIds) ? req.staffCampusIds : [];
+  return targetCampusIds.some((item) => allowedCampusIds.includes(item));
+};
+
 exports.getStaffByInstitution = async (req, res) => {
   try {
     const { institutionId } = req.query;
     if (!institutionId) return res.status(400).json({ message: "institutionId is required" });
 
     const where = { institutionId };
-    if (req.user?.role === "STAFF_ADMIN") {
+    if (req.scope?.type === "OWN") {
       where.OR = [
         { campusId: { in: req.staffCampusIds || [] } },
         { campusLinks: { some: { campusId: { in: req.staffCampusIds || [] } } } },
@@ -153,15 +168,8 @@ exports.updateStaff = async (req, res) => {
     });
     if (!staff) return res.status(404).json({ message: "Staff not found" });
 
-    if (req.user?.role === "STAFF_ADMIN") {
-      const targetCampusIds = getStaffCampusIds(staff);
-      const canAccessTarget = targetCampusIds.length === 0
-        ? false
-        : targetCampusIds.some((item) => (req.staffCampusIds || []).includes(item));
-
-      if (!canAccessTarget) {
-        return res.status(403).json({ message: "Access denied for this staff" });
-      }
+    if (!canAccessStaffByScope(req, staff)) {
+      return res.status(403).json({ message: "Access denied for this staff" });
     }
 
     const normalizedEmail = email === undefined ? undefined : String(email).trim().toLowerCase();
@@ -266,15 +274,8 @@ exports.deleteStaff = async (req, res) => {
     });
     if (!staff) return res.status(404).json({ message: "Staff not found" });
 
-    if (req.user?.role === "STAFF_ADMIN") {
-      const targetCampusIds = getStaffCampusIds(staff);
-      const canAccessTarget = targetCampusIds.length === 0
-        ? false
-        : targetCampusIds.some((item) => (req.staffCampusIds || []).includes(item));
-
-      if (!canAccessTarget) {
-        return res.status(403).json({ message: "Access denied for this staff" });
-      }
+    if (!canAccessStaffByScope(req, staff)) {
+      return res.status(403).json({ message: "Access denied for this staff" });
     }
 
     await prisma.staffCampus.deleteMany({ where: { staffId: id } });

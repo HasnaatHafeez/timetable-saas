@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Wand2, Loader2, CheckCircle } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -16,6 +16,9 @@ import { useInstitution } from "@/contexts/InstitutionContext";
 type AcademicLevelOption = { id: string; name: string };
 type ClassOption = { id: string; name: string; section?: string; semester?: string; academicLevelId?: string; subjects?: string[] };
 type SubjectOption = { id: string; name: string; weeklyHours?: number; creditHours?: number };
+type UsageData = { used: number; limit: number; remaining: number; plan: string; feature: string };
+
+const getUsageStorageKey = (campusId: string) => `timetable_usage:${campusId}`;
 
 const GenerateTimetablePage = () => {
   const [generating, setGenerating] = useState(false);
@@ -32,9 +35,36 @@ const GenerateTimetablePage = () => {
   const [selectedClassName, setSelectedClassName] = useState("");
   const [selectedAcademicLevelId, setSelectedAcademicLevelId] = useState("");
   const [selectedSectionId, setSelectedSectionId] = useState("");
+  const [usage, setUsage] = useState<UsageData | null>(null);
+  const [limitExceeded, setLimitExceeded] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { institution, campus, academicLevel } = useInstitution();
+
+  useEffect(() => {
+    if (!campus?.id) {
+      setUsage(null);
+      setLimitExceeded(false);
+      return;
+    }
+
+    try {
+      const rawUsage = window.localStorage.getItem(getUsageStorageKey(campus.id));
+      if (!rawUsage) return;
+
+      const parsedUsage = JSON.parse(rawUsage) as UsageData;
+      if (
+        typeof parsedUsage?.used === "number" &&
+        typeof parsedUsage?.limit === "number" &&
+        typeof parsedUsage?.remaining === "number"
+      ) {
+        setUsage(parsedUsage);
+        setLimitExceeded(parsedUsage.limit !== -1 && parsedUsage.remaining <= 0);
+      }
+    } catch {
+      // Ignore invalid cached usage data
+    }
+  }, [campus?.id]);
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -211,7 +241,7 @@ const GenerateTimetablePage = () => {
           : new Date().toLocaleString()
       );
 
-      await api.post("/timetable/generate", {
+      const generateResponse = await api.post("/timetable/generate", {
         campusId: campus.id,
         generationScope,
         academicLevelId: generationScope === "CLASS" ? selectedAcademicLevelId : undefined,
@@ -224,19 +254,61 @@ const GenerateTimetablePage = () => {
               return acc;
             }, {})),
       });
+
+      // Capture usage data from response
+      if (generateResponse?.data?.usage) {
+        setUsage(generateResponse.data.usage);
+        window.localStorage.setItem(
+          getUsageStorageKey(campus.id),
+          JSON.stringify(generateResponse.data.usage)
+        );
+      }
+
       setDone(true);
+      setLimitExceeded(false);
       toast({
         title: "Timetable generated!",
         description: `Your conflict-free schedule is ready for ${institution?.type || "the selected institution type"}${campus?.name ? ` (${campus.name})` : ""}.`,
       });
     } catch (err: any) {
-      toast({
-        title: "Generation failed",
-        description: err.response?.data?.message || "Something went wrong",
-        variant: "destructive",
-      });
+      const errorStatus = err.response?.status;
+      const errorData = err.response?.data;
+
+      // Handle usage limit exceeded
+      if (errorStatus === 403 && errorData?.usage) {
+        setUsage(errorData.usage);
+        setLimitExceeded(true);
+        window.localStorage.setItem(
+          getUsageStorageKey(campus.id),
+          JSON.stringify(errorData.usage)
+        );
+        toast({
+          title: "Usage limit reached",
+          description: "Please upgrade your plan to generate more timetables.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Generation failed",
+          description: errorData?.message || "Something went wrong",
+          variant: "destructive",
+        });
+      }
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const isUsageBlocked = limitExceeded || usage?.remaining === 0;
+
+  const getUpgradeText = (plan: string) => {
+    switch (plan) {
+      case "FREE":
+        return "Upgrade to PRO — Get 50 Timetables/month";
+      case "PRO":
+        return "Upgrade to ENTERPRISE — Unlimited Timetables";
+      default:
+        return "Upgrade Your Plan";
     }
   };
 
@@ -406,6 +478,54 @@ const GenerateTimetablePage = () => {
               </p>
             </div>
 
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-3">
+              <div className="flex items-center justify-between">
+                <p className="flex items-center gap-2 text-sm font-medium text-blue-900">
+                  <TrendingUp className="h-4 w-4" />
+                  Monthly Usage
+                </p>
+                {usage?.plan ? (
+                  <span className="rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-blue-800">
+                    {usage.plan}
+                  </span>
+                ) : null}
+              </div>
+              {usage ? (
+                <div className="mt-2 space-y-2 text-sm">
+                  <p className="text-foreground">Timetables used: {usage.used} / {usage.limit === -1 ? "Unlimited" : usage.limit}</p>
+                  {usage.limit === -1 ? (
+                    <p className="text-green-700 font-medium">Unlimited usage (Enterprise plan)</p>
+                  ) : (
+                    <>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-blue-200">
+                        <div
+                          className="h-full bg-blue-600 transition-all"
+                          style={{ width: `${Math.min((usage.used / usage.limit) * 100, 100)}%` }}
+                        />
+                      </div>
+                      {usage.remaining === 1 ? (
+                        <p className="text-orange-600 font-medium">⚠ Last generation remaining this month</p>
+                      ) : (
+                        <p className={limitExceeded ? "text-destructive" : "text-blue-800"}>
+                          Remaining: {usage.remaining} generation(s) remaining this month
+                        </p>
+                      )}
+                    </>
+                  )}
+                  {limitExceeded ? (
+                    <div className="space-y-2 pt-2">
+                      <p className="text-xs text-muted-foreground">You're currently on {usage.plan} plan</p>
+                      <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-700">
+                        {getUpgradeText(usage.plan)}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">No usage history yet for this campus. Generate once to start tracking.</p>
+              )}
+            </div>
+
             {done ? (
               <div className="flex flex-wrap gap-3">
                 <Button onClick={() => navigate("/timetable")}>View Timetable</Button>
@@ -415,7 +535,9 @@ const GenerateTimetablePage = () => {
               <Button
                 size="lg"
                 onClick={handleGenerate}
+                className={isUsageBlocked ? "bg-amber-600 text-white hover:bg-amber-600" : undefined}
                 disabled={
+                  isUsageBlocked ||
                   generating ||
                   loadingOptions ||
                   loadingSettings ||
@@ -427,6 +549,8 @@ const GenerateTimetablePage = () => {
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                     Generating...
                   </>
+                ) : isUsageBlocked ? (
+                  <>Upgrade to Continue</>
                 ) : (
                   <>
                     <Wand2 className="mr-2 h-5 w-5" />

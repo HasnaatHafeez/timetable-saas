@@ -1,7 +1,8 @@
 const express = require("express");
 const auth = require("../middlewares/auth.middleware");
 const tenant = require("../middlewares/tenant.middleware");
-const role = require("../middlewares/role.middleware");
+const { requirePermission } = require("../middlewares/rbac.middleware");
+const { PERMISSIONS } = require("../config/permissions");
 const {
   getTeachers,
   getTeacherById,
@@ -14,8 +15,8 @@ const router = express.Router();
 
 router.get("/", auth, tenant, getTeachers);
 router.get("/:id", auth, tenant, getTeacherById);
-router.post("/", auth, tenant, role(["INSTITUTION_OWNER"]), createTeacher);
-router.put("/:id", auth, tenant, role(["INSTITUTION_OWNER"]), updateTeacher);
-router.delete("/:id", auth, tenant, role(["INSTITUTION_OWNER"]), deleteTeacher);
+router.post("/", auth, tenant, requirePermission(PERMISSIONS.TEACHER_CREATE), createTeacher);
+router.put("/:id", auth, tenant, requirePermission(PERMISSIONS.TEACHER_UPDATE), updateTeacher);
+router.delete("/:id", auth, tenant, requirePermission(PERMISSIONS.TEACHER_DELETE), deleteTeacher);
 
 module.exports = router;

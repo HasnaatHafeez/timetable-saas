@@ -1,7 +1,8 @@
 const express = require("express");
 const auth = require("../middlewares/auth.middleware");
 const tenant = require("../middlewares/tenant.middleware");
-const role = require("../middlewares/role.middleware");
+const { requirePermission } = require("../middlewares/rbac.middleware");
+const { PERMISSIONS } = require("../config/permissions");
 const {
   getDepartments,
   getDepartmentById,
@@ -19,7 +20,7 @@ router.post(
   "/",
   auth,
   tenant,
-  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  requirePermission(PERMISSIONS.DEPARTMENT_CREATE),
   createDepartment
 );
 
@@ -27,7 +28,7 @@ router.post(
   "/create",
   auth,
   tenant,
-  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  requirePermission(PERMISSIONS.DEPARTMENT_CREATE),
   createDepartment
 );
 
@@ -35,7 +36,7 @@ router.put(
   "/:id",
   auth,
   tenant,
-  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  requirePermission(PERMISSIONS.DEPARTMENT_UPDATE),
   updateDepartment
 );
 
@@ -43,7 +44,7 @@ router.delete(
   "/:id",
   auth,
   tenant,
-  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  requirePermission(PERMISSIONS.DEPARTMENT_DELETE),
   deleteDepartment
 );
 

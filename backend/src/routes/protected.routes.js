@@ -1,13 +1,14 @@
 const express = require("express");
 const auth = require("../middlewares/auth.middleware");
-const role = require("../middlewares/role.middleware");
+const { requirePermission } = require("../middlewares/rbac.middleware");
+const { PERMISSIONS } = require("../config/permissions");
 
 const router = express.Router();
 
 router.get(
   "/owner-only",
   auth,
-  role(["INSTITUTION_OWNER"]),
+  requirePermission(PERMISSIONS.PROTECTED_OWNER_ONLY),
   (req, res) => {
     res.json({
       message: "Welcome Institution Owner",

@@ -1,7 +1,8 @@
 const express = require("express");
 const auth = require("../middlewares/auth.middleware");
 const tenant = require("../middlewares/tenant.middleware");
-const role = require("../middlewares/role.middleware");
+const { requirePermission } = require("../middlewares/rbac.middleware");
+const { PERMISSIONS } = require("../config/permissions");
 const {
   getWorkingDays,
   getWorkingDayById,
@@ -24,7 +25,7 @@ router.post(
   "/holidays",
   auth,
   tenant,
-  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  requirePermission(PERMISSIONS.WORKINGDAY_MANAGE),
   createHoliday
 );
 
@@ -32,7 +33,7 @@ router.put(
   "/holidays/:id",
   auth,
   tenant,
-  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  requirePermission(PERMISSIONS.WORKINGDAY_MANAGE),
   updateHoliday
 );
 
@@ -40,7 +41,7 @@ router.delete(
   "/holidays/:id",
   auth,
   tenant,
-  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  requirePermission(PERMISSIONS.WORKINGDAY_MANAGE),
   deleteHoliday
 );
 
@@ -48,7 +49,7 @@ router.post(
   "/",
   auth,
   tenant,
-  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  requirePermission(PERMISSIONS.WORKINGDAY_MANAGE),
   createWorkingDay
 );
 
@@ -56,7 +57,7 @@ router.post(
   "/create",
   auth,
   tenant,
-  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  requirePermission(PERMISSIONS.WORKINGDAY_MANAGE),
   createWorkingDay
 );
 
@@ -64,7 +65,7 @@ router.put(
   "/:id",
   auth,
   tenant,
-  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  requirePermission(PERMISSIONS.WORKINGDAY_MANAGE),
   updateWorkingDay
 );
 
@@ -72,7 +73,7 @@ router.delete(
   "/:id",
   auth,
   tenant,
-  role(["INSTITUTION_OWNER", "STAFF_ADMIN"]),
+  requirePermission(PERMISSIONS.WORKINGDAY_MANAGE),
   deleteWorkingDay
 );
 

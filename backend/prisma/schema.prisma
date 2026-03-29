@@ -42,18 +42,46 @@ enum AuditLogType {
   ERROR
 }
 
-model User {
-  id        String @id @default(uuid())
-  name      String
-  email     String @unique
-  password  String
-  role      Role
-  isActive  Boolean @default(true)
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+}
 
-  staffs    Staff[]
+enum SubscriptionSource {
+  MANUAL
+  STRIPE
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+model User {
+  id             String  @id @default(uuid())
+  supabaseId     String? @unique
+  activeCampusId String?
+  name           String
+  email          String  @unique
+  password       String
+  role           Role
+  isActive       Boolean @default(true)
+  resetPasswordToken     String?
+  resetPasswordExpiresAt DateTime?
+
+  activeCampus Campus? @relation("UserActiveCampus", fields: [activeCampusId], references: [id])
+  staffs       Staff[]
+  campuses     UserCampus[]
+  sentInvites  Invite[] @relation("InvitesSent")
+  acceptedInvites Invite[] @relation("InvitesAccepted")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([activeCampusId])
+  @@index([resetPasswordToken])
 }
 
 model Institution {
@@ -75,6 +103,7 @@ model Campus {
   institutionId String
   name          String
   location      String
+  plan          String @default("FREE")
 
   institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
 
@@ -88,11 +117,52 @@ model Campus {
   holidays      Holiday[]
   academicLevels AcademicLevel[]
   timetables    Timetable[]
+  subscriptions Subscription[]
   teacherAvailabilities TeacherAvailability[]
   staffs        Staff[]
   staffCampusLinks StaffCampus[]
+  activeUsers   User[] @relation("UserActiveCampus")
+  userMembers   UserCampus[]
+  invites       Invite[]
 
   createdAt DateTime @default(now())
+}
+
+model UserCampus {
+  id        String @id @default(uuid())
+  userId    String
+  campusId  String
+  createdAt DateTime @default(now())
+
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus    Campus @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, campusId])
+  @@index([userId])
+  @@index([campusId])
+}
+
+model Invite {
+  id              String      @id @default(uuid())
+  token           String      @unique
+  email           String
+  campusId        String
+  role            Role
+  status          InviteStatus @default(PENDING)
+  expiresAt       DateTime
+  invitedByUserId String
+  acceptedByUserId String?
+  acceptedAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  campus          Campus      @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  invitedByUser   User        @relation("InvitesSent", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  acceptedByUser  User?       @relation("InvitesAccepted", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([campusId])
+  @@index([status])
 }
 
 model AcademicLevel {
@@ -343,5 +413,37 @@ model AuditLog {
   @@index([campusId])
   @@index([type])
   @@index([createdAt])
+}
+
+model Usage {
+  id        String   @id @default(cuid())
+  campusId  String
+  feature   String
+  count     Int      @default(0)
+  month     Int
+  year      Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([campusId, feature, month, year])
+  @@index([campusId])
+}
+
+model Subscription {
+  id        String             @id @default(uuid())
+  campusId  String
+  plan      String
+  status    SubscriptionStatus @default(ACTIVE)
+  source    SubscriptionSource @default(MANUAL)
+  startDate DateTime
+  endDate   DateTime?
+  createdAt DateTime           @default(now())
+
+  campus    Campus             @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  // Constraint: Only one ACTIVE subscription per campus at any time.
+  // Enforced via application logic: always cancel previous ACTIVE before creating new ACTIVE.
+  @@unique([campusId, status])
+  @@index([campusId])
 }
 

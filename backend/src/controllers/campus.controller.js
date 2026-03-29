@@ -1,9 +1,10 @@
 const prisma = require("../prisma/client");
+// DO NOT add role-based checks here. Use RBAC middleware.
 
 exports.getCampuses = async (req, res) => {
   try {
     const { institutionId } = req.query;
-    const isStaffAdmin = req.user?.role === "STAFF_ADMIN";
+    const isOwnScope = req.scope?.type === "OWN";
     const staffCampusIds = Array.isArray(req.staffCampusIds) ? req.staffCampusIds : [];
 
     let where = {};
@@ -11,7 +12,7 @@ exports.getCampuses = async (req, res) => {
       where.institutionId = institutionId;
     }
 
-    if (isStaffAdmin) {
+    if (isOwnScope) {
       where.id = { in: staffCampusIds };
       if (req.staffInstitutionId) {
         where.institutionId = req.staffInstitutionId;
@@ -38,7 +39,7 @@ exports.getCampusById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (req.user?.role === "STAFF_ADMIN") {
+    if (req.scope?.type === "OWN") {
       const staffCampusIds = Array.isArray(req.staffCampusIds) ? req.staffCampusIds : [];
       if (!staffCampusIds.includes(id)) {
         return res.status(403).json({ message: "Access denied for this campus" });
@@ -74,6 +75,7 @@ exports.createCampus = async (req, res) => {
         institutionId,
         name,
         location: location || "",
+        plan: "FREE",
       },
     });
 
@@ -145,14 +147,14 @@ exports.deleteCampus = async (req, res) => {
 exports.getAcademicLevels = async (req, res) => {
   try {
     const { campusId } = req.query;
-    const isStaffAdmin = req.user?.role === "STAFF_ADMIN";
+    const isOwnScope = req.scope?.type === "OWN";
     const staffCampusIds = Array.isArray(req.staffCampusIds) ? req.staffCampusIds : [];
 
     const where = {};
     if (campusId) {
       where.campusId = campusId;
     }
-    if (isStaffAdmin) {
+    if (isOwnScope) {
       where.campusId = campusId ? campusId : { in: staffCampusIds };
     }
 
@@ -188,5 +190,71 @@ exports.createAcademicLevel = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to create academic level" });
+  }
+};
+
+exports.upgradeCampusPlan = async (req, res) => {
+  try {
+    const role = req.user?.role;
+    const { newPlan, campusId: requestCampusId } = req.body;
+    const institutionId = req.user?.institutionId;
+    const tenantCampusId = req.campus?.id;
+
+    // Determine which campusId to use based on role
+    let campusId;
+    if (role === "SYSTEM_ADMIN") {
+      // SYSTEM_ADMIN must provide campusId in request body
+      if (!requestCampusId) {
+        return res.status(400).json({ message: "Campus ID required for system administrators" });
+      }
+      campusId = requestCampusId;
+    } else if (role === "INSTITUTION_OWNER") {
+      // INSTITUTION_OWNER uses their tenant campus (ignore request campusId)
+      if (!tenantCampusId) {
+        return res.status(400).json({ message: "Campus ID not found in tenant context" });
+      }
+      campusId = tenantCampusId;
+    } else {
+      return res.status(403).json({ message: "Only institution owners and system administrators can upgrade plans" });
+    }
+
+    // Validate plan is one of the valid values
+    const validPlans = ["FREE", "PRO", "ENTERPRISE"];
+    if (!validPlans.includes(newPlan)) {
+      return res.status(400).json({ 
+        message: `Invalid plan. Must be one of: ${validPlans.join(", ")}` 
+      });
+    }
+
+    // Fetch campus
+    const campus = await prisma.campus.findUnique({
+      where: { id: campusId },
+    });
+
+    if (!campus) {
+      return res.status(404).json({ message: "Campus not found" });
+    }
+
+    // For INSTITUTION_OWNER, verify they own this campus's institution
+    if (role === "INSTITUTION_OWNER" && campus.institutionId !== institutionId) {
+      return res.status(403).json({ message: "You can only upgrade campuses in your institution" });
+    }
+
+    // Update the plan
+    const updated = await prisma.campus.update({
+      where: { id: campusId },
+      data: { plan: newPlan },
+    });
+
+    res.json({
+      id: updated.id,
+      name: updated.name,
+      location: updated.location,
+      institutionId: updated.institutionId,
+      plan: updated.plan,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to upgrade campus plan" });
   }
 };
