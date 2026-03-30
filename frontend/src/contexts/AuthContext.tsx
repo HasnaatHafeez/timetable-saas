@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "@/lib/api";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 interface User {
   id: string;
@@ -31,95 +32,218 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    const savedUser = localStorage.getItem("user");
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch {
-        localStorage.removeItem("user");
-      }
+  const mapBackendRole = (rawRole?: string) => (rawRole === "TEACHER" || rawRole === "teacher" ? "teacher" : "admin");
+
+  const setAuthState = useCallback((nextToken: string | null, nextUser: User | null) => {
+    if (nextToken) {
+      localStorage.setItem("token", nextToken);
+      setToken(nextToken);
+    } else {
+      localStorage.removeItem("token");
+      setToken(null);
     }
-    setIsLoading(false);
+
+    if (nextUser) {
+      localStorage.setItem("user", JSON.stringify(nextUser));
+      setUser(nextUser);
+    } else {
+      localStorage.removeItem("user");
+      setUser(null);
+    }
   }, []);
+
+  const syncBackendSession = useCallback(async (fallbackEmail?: string): Promise<User | null> => {
+    try {
+      const response = await api.get("/auth/session");
+      const backendUser = response.data?.user;
+      if (!backendUser) return null;
+
+      return {
+        id: backendUser.id,
+        name: backendUser.name || fallbackEmail || "User",
+        email: backendUser.email,
+        role: mapBackendRole(backendUser.backendRole || backendUser.role),
+        backendRole: backendUser.backendRole || backendUser.role,
+      };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const hydrateSession = async () => {
+      if (!isSupabaseConfigured) {
+        setAuthState(null, null);
+        setIsLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      if (error || !data.session) {
+        setAuthState(null, null);
+        setIsLoading(false);
+        return;
+      }
+
+      const accessToken = data.session.access_token;
+      const fallbackEmail = data.session.user.email || "";
+      const backendUser = await syncBackendSession(fallbackEmail);
+
+      const mappedUser: User = backendUser || {
+        id: data.session.user.id,
+        name: data.session.user.user_metadata?.full_name || fallbackEmail || "User",
+        email: fallbackEmail,
+        role: "teacher",
+        backendRole: "TEACHER",
+      };
+
+      setAuthState(accessToken, mappedUser);
+      setIsLoading(false);
+    };
+
+    hydrateSession();
+
+    if (!isSupabaseConfigured) {
+      return () => {
+        mounted = false;
+      };
+    }
+
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
+
+      if (!session) {
+        setAuthState(null, null);
+        return;
+      }
+
+      const accessToken = session.access_token;
+      const fallbackEmail = session.user.email || "";
+      const backendUser = await syncBackendSession(fallbackEmail);
+
+      const mappedUser: User = backendUser || {
+        id: session.user.id,
+        name: session.user.user_metadata?.full_name || fallbackEmail || "User",
+        email: fallbackEmail,
+        role: "teacher",
+        backendRole: "TEACHER",
+      };
+
+      setAuthState(accessToken, mappedUser);
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [setAuthState, syncBackendSession]);
 
   const login = useCallback(async (email: string, password: string) => {
-    // Demo mode: use demo@unischedule.com / demo1234 to preview without backend
-    if (email === "demo@unischedule.com" && password === "demo1234") {
-      const demoUser: User = { id: "demo", name: "Demo Admin", email: "demo@unischedule.com", role: "admin" };
-      const demoToken = "demo-token";
-      localStorage.setItem("token", demoToken);
-      localStorage.setItem("user", JSON.stringify(demoUser));
-      setToken(demoToken);
-      setUser(demoUser);
-      return;
+    if (!isSupabaseConfigured) {
+      throw new Error("Supabase auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
     }
-    const res = await api.post("/auth/login", { email, password });
-    const { token: t, user: u } = res.data;
-    const rawRole = u.backendRole || u.role;
-    const mappedUser = {
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      role: rawRole === "TEACHER" || rawRole === "teacher" ? "teacher" : "admin",
-      backendRole: rawRole,
-    } as User;
-    localStorage.setItem("token", t);
-    localStorage.setItem("user", JSON.stringify(mappedUser));
-    setToken(t);
-    setUser(mappedUser);
-  }, []);
 
-  const register = useCallback(async (name: string, email: string, password: string, role = "admin") => {
-    const res = await api.post("/auth/register", { name, email, password, role });
-    const { token: t, user: u } = res.data;
-    // normalize role to frontend enum and keep backend role
-    const rawRole = u.backendRole || u.role;
-    const mappedUser = {
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      role: rawRole === "teacher" || rawRole === "TEACHER" ? "teacher" : "admin",
-      backendRole: rawRole,
-    } as User;
-    localStorage.setItem("token", t);
-    localStorage.setItem("user", JSON.stringify(mappedUser));
-    setToken(t);
-    setUser(mappedUser);
-  }, []);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      throw error;
+    }
+
+    const session = data.session;
+    if (!session) {
+      throw new Error("No Supabase session returned");
+    }
+
+    const backendUser = await syncBackendSession(session.user.email || "");
+    const mappedUser: User = backendUser || {
+      id: session.user.id,
+      name: session.user.user_metadata?.full_name || session.user.email || "User",
+      email: session.user.email || "",
+      role: "teacher",
+      backendRole: "TEACHER",
+    };
+
+    setAuthState(session.access_token, mappedUser);
+  }, [setAuthState, syncBackendSession]);
 
   const signup = useCallback(async (name: string, email: string, password: string) => {
-    const res = await api.post("/auth/signup", { name, email, password });
-    const { token: t, user: u } = res.data;
-    const rawRole = u.backendRole || u.role;
-    const mappedUser = {
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      role: rawRole === "TEACHER" || rawRole === "teacher" ? "teacher" : "admin",
-      backendRole: rawRole,
-    } as User;
-    localStorage.setItem("token", t);
-    localStorage.setItem("user", JSON.stringify(mappedUser));
-    setToken(t);
-    setUser(mappedUser);
-  }, []);
+    if (!isSupabaseConfigured) {
+      throw new Error("Supabase auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: name,
+        },
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data.session) {
+      throw new Error("Signup succeeded. Please verify your email before logging in.");
+    }
+
+    const session = data.session;
+    const backendUser = await syncBackendSession(session.user.email || "");
+    const mappedUser: User = backendUser || {
+      id: session.user.id,
+      name: name || session.user.email || "User",
+      email: session.user.email || "",
+      role: "teacher",
+      backendRole: "TEACHER",
+    };
+
+    setAuthState(session.access_token, mappedUser);
+  }, [setAuthState, syncBackendSession]);
+
+  const register = useCallback(async (name: string, email: string, password: string) => {
+    await signup(name, email, password);
+  }, [signup]);
 
   const logout = useCallback(() => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    setToken(null);
-    setUser(null);
-  }, []);
+    void supabase.auth.signOut();
+    setAuthState(null, null);
+  }, [setAuthState]);
 
   const forgotPassword = useCallback(async (email: string) => {
-    await api.post("/auth/forgot-password", { email });
+    if (!isSupabaseConfigured) {
+      throw new Error("Supabase auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+    }
+
+    const redirectTo = `${window.location.origin}/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) {
+      throw error;
+    }
   }, []);
 
   const resetPassword = useCallback(async (token: string, newPassword: string) => {
-    await api.post("/auth/reset-password", { token, newPassword });
+    if (!isSupabaseConfigured) {
+      throw new Error("Supabase auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+    }
+
+    const normalizedToken = String(token || "").trim();
+    if (normalizedToken) {
+      await supabase.auth.verifyOtp({
+        token_hash: normalizedToken,
+        type: "recovery",
+      });
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      throw error;
+    }
   }, []);
 
   const updateProfile = useCallback(async (data: Partial<User>) => {
@@ -138,7 +262,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
-    await api.put("/auth/change-password", { currentPassword, newPassword });
+    if (!currentPassword) {
+      throw new Error("Current password is required.");
+    }
+
+    if (!isSupabaseConfigured) {
+      throw new Error("Supabase auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      throw error;
+    }
   }, []);
 
   return (

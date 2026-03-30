@@ -3,8 +3,44 @@ const prisma = require("../prisma/client");
 
 const INVITE_TTL_DAYS = Number(process.env.INVITE_TTL_DAYS || 7);
 const ALLOWED_INVITE_ROLES = new Set(["TEACHER", "STAFF_ADMIN"]);
+const CAMPUS_ADMIN_ROLES = new Set(["INSTITUTION_OWNER", "STAFF_ADMIN"]);
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+
+const getManagedCampusId = async (req) => {
+  const role = req.user?.role;
+  const userId = req.user?.id;
+  const campusId = String(req.user?.campusId || "").trim();
+
+  if (!CAMPUS_ADMIN_ROLES.has(role)) {
+    return null;
+  }
+
+  if (!campusId) {
+    return null;
+  }
+
+  if (role === "STAFF_ADMIN") {
+    const staffCampusIds = Array.isArray(req.staffCampusIds) ? req.staffCampusIds : [];
+    return staffCampusIds.includes(campusId) ? campusId : null;
+  }
+
+  if (role === "INSTITUTION_OWNER") {
+    const campus = await prisma.campus.findFirst({
+      where: {
+        id: campusId,
+        institution: {
+          ownerId: userId,
+        },
+      },
+      select: { id: true },
+    });
+
+    return campus ? campusId : null;
+  }
+
+  return null;
+};
 
 const resolveCampusForInvite = async ({ role, userId, campusId, staffCampusIds }) => {
   if (!campusId) return null;
@@ -47,13 +83,13 @@ exports.createInvite = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    if (!["SYSTEM_ADMIN", "INSTITUTION_OWNER", "STAFF_ADMIN"].includes(requesterRole)) {
+    if (!CAMPUS_ADMIN_ROLES.has(requesterRole)) {
       return res.status(403).json({ message: "Access denied" });
     }
 
     const email = normalizeEmail(req.body?.email);
     const role = String(req.body?.role || "").trim();
-    const campusId = String(req.body?.campusId || req.user?.campusId || "").trim();
+    const campusId = await getManagedCampusId(req);
 
     if (!email) {
       return res.status(400).json({ message: "email is required" });
@@ -122,6 +158,190 @@ exports.createInvite = async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Failed to create invitation" });
+  }
+};
+
+exports.listPendingInvites = async (req, res) => {
+  try {
+    const campusId = await getManagedCampusId(req);
+
+    if (!campusId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    await prisma.invite.updateMany({
+      where: {
+        campusId,
+        status: "PENDING",
+        expiresAt: {
+          lte: new Date(),
+        },
+      },
+      data: {
+        status: "EXPIRED",
+      },
+    });
+
+    const invites = await prisma.invite.findMany({
+      where: {
+        campusId,
+        status: "PENDING",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        expiresAt: true,
+        createdAt: true,
+      },
+    });
+
+    return res.json({
+      campusId,
+      invites,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to list invitations" });
+  }
+};
+
+exports.revokeInvite = async (req, res) => {
+  try {
+    const campusId = await getManagedCampusId(req);
+
+    if (!campusId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const inviteId = String(req.params?.id || "").trim();
+    if (!inviteId) {
+      return res.status(400).json({ message: "Invite id is required" });
+    }
+
+    const invite = await prisma.invite.findUnique({
+      where: { id: inviteId },
+      select: {
+        id: true,
+        campusId: true,
+        status: true,
+      },
+    });
+
+    if (!invite) {
+      return res.status(404).json({ message: "Invitation not found" });
+    }
+
+    if (invite.campusId !== campusId) {
+      return res.status(403).json({ message: "Access denied for selected campus" });
+    }
+
+    if (invite.status === "ACCEPTED") {
+      return res.status(400).json({ message: "Accepted invitations cannot be revoked" });
+    }
+
+    if (invite.status === "CANCELLED") {
+      return res.json({ message: "Invitation already cancelled" });
+    }
+
+    await prisma.invite.update({
+      where: { id: invite.id },
+      data: {
+        status: "CANCELLED",
+      },
+    });
+
+    return res.json({ message: "Invitation cancelled" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to cancel invitation" });
+  }
+};
+
+exports.resendInvite = async (req, res) => {
+  try {
+    const campusId = await getManagedCampusId(req);
+
+    if (!campusId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const inviteId = String(req.body?.id || req.body?.inviteId || "").trim();
+    if (!inviteId) {
+      return res.status(400).json({ message: "inviteId is required" });
+    }
+
+    const invite = await prisma.invite.findUnique({
+      where: { id: inviteId },
+      select: {
+        id: true,
+        campusId: true,
+        status: true,
+      },
+    });
+
+    if (!invite) {
+      return res.status(404).json({ message: "Invitation not found" });
+    }
+
+    if (invite.campusId !== campusId) {
+      return res.status(403).json({ message: "Access denied for selected campus" });
+    }
+
+    if (invite.status === "ACCEPTED") {
+      return res.status(400).json({ message: "Accepted invitations cannot be resent" });
+    }
+
+    if (invite.status === "CANCELLED") {
+      return res.status(400).json({ message: "Cancelled invitations cannot be resent" });
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+    const updatedInvite = await prisma.invite.update({
+      where: { id: invite.id },
+      data: {
+        token,
+        expiresAt,
+        status: "PENDING",
+      },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        campusId: true,
+        status: true,
+        expiresAt: true,
+        token: true,
+      },
+    });
+
+    const frontendBaseUrl = String(process.env.FRONTEND_URL || "").replace(/\/$/, "");
+    const inviteLink = frontendBaseUrl
+      ? `${frontendBaseUrl}/accept-invite?token=${encodeURIComponent(updatedInvite.token)}`
+      : null;
+
+    return res.json({
+      message: "Invitation resent",
+      invite: {
+        id: updatedInvite.id,
+        email: updatedInvite.email,
+        role: updatedInvite.role,
+        campusId: updatedInvite.campusId,
+        status: updatedInvite.status,
+        expiresAt: updatedInvite.expiresAt,
+      },
+      inviteToken: updatedInvite.token,
+      inviteLink,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to resend invitation" });
   }
 };
 

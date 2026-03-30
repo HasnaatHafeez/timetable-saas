@@ -1,14 +1,31 @@
 const jwt = require("jsonwebtoken");
 const prisma = require("../prisma/client");
 
+const shouldDebugAuth = process.env.AUTH_DEBUG === "true" || process.env.NODE_ENV !== "production";
+const debugAuth = (message, data = {}) => {
+  if (shouldDebugAuth) {
+    console.debug("[AUTH]", message, data);
+  }
+};
+
 module.exports = async (req, res, next) => {
   const authHeader = req.headers.authorization;
+
+  debugAuth("Incoming request", {
+    method: req.method,
+    path: req.originalUrl || req.path,
+    hasAuthorizationHeader: Boolean(authHeader),
+  });
 
   if (!authHeader) {
     return res.status(401).json({ message: "No token provided" });
   }
 
   const token = authHeader.split(" ")[1];
+  debugAuth("Extracted bearer token", {
+    hasToken: Boolean(token),
+    tokenPreview: token ? `${String(token).slice(0, 10)}...` : null,
+  });
 
   try {
     // Verify token using Supabase JWT secret
@@ -24,7 +41,19 @@ module.exports = async (req, res, next) => {
 
     const decoded = jwt.verify(token, supabaseSecret);
     const expectedIssuer = `${supabaseUrl}/auth/v1`;
+    debugAuth("Decoded Supabase JWT", {
+      iss: decoded.iss,
+      aud: decoded.aud,
+      sub: decoded.sub,
+      exp: decoded.exp,
+    });
+
     if (decoded.iss !== expectedIssuer || decoded.aud !== "authenticated") {
+      debugAuth("Token claims rejected", {
+        expectedIssuer,
+        actualIssuer: decoded.iss,
+        actualAudience: decoded.aud,
+      });
       return res.status(401).json({ message: "Invalid token claims" });
     }
 
@@ -38,6 +67,10 @@ module.exports = async (req, res, next) => {
     // Find user in database using supabaseId
     let user = await prisma.user.findUnique({
       where: { supabaseId },
+    });
+    debugAuth("User lookup by supabaseId", {
+      supabaseId,
+      found: Boolean(user),
     });
 
     if (!user) {
@@ -61,6 +94,10 @@ module.exports = async (req, res, next) => {
           where: { id: user.id },
           data: { supabaseId },
         });
+        debugAuth("Linked existing user to supabaseId", {
+          userId: user.id,
+          email: user.email,
+        });
       } else {
         const generatedName = normalizedEmail.split("@")[0] || "User";
 
@@ -73,6 +110,11 @@ module.exports = async (req, res, next) => {
             role: "TEACHER",
             isActive: true,
           },
+        });
+        debugAuth("Auto-created user from Supabase token", {
+          userId: user.id,
+          email: user.email,
+          role: user.role,
         });
       }
     }
@@ -92,6 +134,9 @@ module.exports = async (req, res, next) => {
         user = await prisma.user.update({
           where: { id: user.id },
           data: { activeCampusId: null },
+        });
+        debugAuth("Cleared invalid active campus assignment", {
+          userId: user.id,
         });
       }
     }
@@ -161,13 +206,27 @@ module.exports = async (req, res, next) => {
     const isAcceptInviteRoute = req.method === "POST" && requestPath.endsWith("/accept");
 
     if (!req.user.campusId && !isGlobalRole && !isSwitchCampusRoute && !isAcceptInviteRoute) {
+      debugAuth("Rejected due to missing campus assignment", {
+        userId: user.id,
+        role: user.role,
+      });
       return res.status(403).json({
         message: "User not assigned to any campus",
       });
     }
 
+    debugAuth("Auth middleware success", {
+      userId: req.user.id,
+      role: req.user.role,
+      campusId: req.user.campusId,
+    });
+
     next();
   } catch (err) {
+    debugAuth("Auth middleware error", {
+      message: err?.message,
+      name: err?.name,
+    });
     return res.status(401).json({ message: "Invalid or expired token" });
   }
 };

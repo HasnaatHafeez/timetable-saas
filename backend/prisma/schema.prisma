@@ -55,6 +55,7 @@ enum SubscriptionSource {
 enum InviteStatus {
   PENDING
   ACCEPTED
+  CANCELLED
   REVOKED
   EXPIRED
 }

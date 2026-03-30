@@ -68,8 +68,8 @@
 - Check that route middleware order is correct
 
 ### Authentication Errors
-- Verify JWT_SECRET is set in backend `.env`
-- Check that token is being sent in Authorization header
+- Verify SUPABASE_JWT_SECRET is set in backend `.env` (used for Supabase JWT verification)
+- Check that Supabase session token is being sent in Authorization header (from frontend)
 - Token format should be: `Bearer <token>`
 
 ### Database Errors
